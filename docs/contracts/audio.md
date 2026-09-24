@@ -38,7 +38,11 @@ Semantics:
 - `setMuted` fades the master in or out over about 0.3 s. `muted` reads it back.
 - `liftLayer(id)` is used only in the lift ending. Brush notes switch to that chapter's scale and timbre. `null` returns to the lift score's own.
 
-Offline rendering: `src/audio/offline.ts` exports `renderOffline(id: ScoreId, durationSec: number, sampleRate?: number): Promise<AudioBuffer>`. It renders a score into an `OfflineAudioContext` with the same code the live engine uses.
+Offline rendering: `src/audio/offline.ts` exports `renderOffline(id: ScoreId, durationSec: number, sampleRate?: number, opts?: RenderOptions): Promise<AudioBuffer>`. It renders a score into an `OfflineAudioContext` with the same code the live engine uses. `durationSec` is the length of audio to render; a chapter is fitted to its length in the table below unless `opts.chapterSec` says otherwise, so `renderOffline('nine', 88)` gives the 80 s chapter and 8 s of its tail.
+
+`RenderOptions` (all optional, added for tools and tests): `chapterSec` fits the chapter to another painting time; `brush` paints a scripted stroke over the whole render; `endAt` calls `endChapter()` at that second; `stems` returns four channels (the mix, then the music bus on its own); `solo` silences everything but `'music'`, `'amb'` or `'bristle'`; `onBrushNote` and `onVoices` report brush notes and voice counts.
+
+Two small behaviours the table does not pin down: `play()` with the id of a chapter that has already ended starts it again, and calls made before `unlock()` are remembered (the last `play`, `duck` and `setMuted`) and applied once it runs.
 
 ## Invariants
 
@@ -71,3 +75,18 @@ A distant church bell strikes eight near the start of `twentythree`, `fortynine`
 | lift | loop | The ending: lifting paint to see the years | Ambient and gentle, built from fragments of the motif. Brush notes follow `liftLayer`. |
 
 The brush is an instrument. While painting there is a very quiet bristle-on-paper noise that follows speed. Notes fall on the score's eighth-note grid, with pitch from height (top is high), pan from x and velocity from speed. Each score has its own brush timbre.
+
+## Implementation
+
+Everything lives in `src/audio/`:
+
+- `index.ts`: the engine. A 25 ms timer schedules 130 ms ahead. `play()` crossfades players over 3 s. The page's `visibilitychange` suspends and resumes the context.
+- `compose.ts`: event types, the pure `schedule(comp, t0, t1)`, and the `Writer` the scores are written with. A chapter is built from sections. `build()` drops or repeats sections, then sets the tempo (within about 10% of the table) so the final cadence lands exactly at `durationSec`.
+- `scores/*.ts`: one composed score per `ScoreId`.
+- `player.ts`: plays one composition, handles `endChapter()` and fades. `synth.ts`: the master chain, reverb, voices, voice cap and ambience beds. `tones.ts`: every instrument, bird and noise loop is synthesised into buffers. `tones.worker.ts` and `warm.ts` build those buffers in a worker before they are needed. `brush.ts`: the brush instrument. `offline.ts`: `renderOffline`. `analysis.ts`: checks used by the tools. `debug.ts`: live counters for the soak test, not part of the game API.
+- The bench is `audio.html` (`src/audio/bench.ts`). It has a button per score, End chapter, Wake, Duck, Mute, a lift layer menu and a pad to paint on.
+- `tools/render-audio.mjs` renders every score in headless Chromium. It writes WAVs and prints peak, RMS, near-silent gaps, motif statements, off-key and off-grid counts and brush stats. `--soak 15` runs the live engine for 15 minutes instead and prints voice and node counts once a minute.
+
+The window theme, as scale degrees: 5 (below the tonic), 3, 2, 1, 6 (below), 7 (below), 1. In C that is G4 E5 D5 C5 A4 B4 C5. The rhythm is 1, 1½, ½, 1, 1, 1, 2 beats. It opens with a rising sixth, falls by step to the tonic, dips to the sixth below and climbs back through the leading note. The `motif()` writer keeps its shape in every key and mode: minor and Dorian give E C B A F G A, and Mixolydian flattens the seventh. `analysis.ts` checks every statement's contour.
+
+Mixing: voices feed dry and wet music buses. Each has a slow tape wobble (a modulated delay), a 3 dB duck and a gentle low-pass. They go into a generated 4.2 s stereo room reverb and then the master: a 32 Hz high-pass, a compressor at -18 dB (2:1), a limiter at -4 dB (20:1) and a soft clipper whose ceiling is -1.04 dBFS. The compressors' automatic makeup gain is cancelled so the thresholds mean what they say. At most 56 voices sound at once; the oldest is faded out over 50 ms. Every voice disconnects its nodes when its sources end.
