@@ -1,5 +1,5 @@
 import type { Composition } from './compose';
-import { adopt, assetKey, isReady, renderAsset, type Asset, type Raw } from './tones';
+import { adopt, assetKey, isReady, renderAsset, toneAsset, type Asset, type Raw } from './tones';
 
 type Deadline = { timeRemaining(): number };
 type Idle = (cb: (d: Deadline) => void) => number;
@@ -21,10 +21,10 @@ export function compositionAssets(c: Composition): Asset[] {
   };
   const tail = c.tail ? c.tail.events : [];
   for (const ev of [...c.events, ...tail, ...c.cadence(0, c.key)]) {
-    if (ev.kind === 'note' && ev.inst !== 'bass') add({ kind: 'tone', id: ev.inst, n: ev.midi });
+    if (ev.kind === 'note' && ev.inst !== 'bass') add(toneAsset(ev.inst, ev.midi).asset);
     if (ev.kind === 'amb') add({ kind: 'amb', id: ev.sound, n: ev.variant });
   }
-  for (let m = c.brush.lo; m <= c.brush.hi + 17; m++) add({ kind: 'tone', id: c.brush.inst, n: m });
+  for (let m = c.brush.lo; m <= c.brush.hi + 5; m++) add(toneAsset(c.brush.inst, m).asset);
   return out;
 }
 

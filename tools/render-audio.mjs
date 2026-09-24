@@ -47,26 +47,22 @@ const only = opt('--only')?.split(',');
 const soakMinutes = Number(opt('--soak') ?? 0);
 const writeWav = !flag('--no-wav');
 
-const LENGTHS = {
-  title: 0, nine: 80, sixteen: 80, twentythree: 85, thirtyone: 50, fortyfour: 80,
-  fortynine: 80, seventytwo: 95, eightysix: 85, later: 85, lift: 0,
-};
-
-const jobs = [];
-for (const [id, len] of Object.entries(LENGTHS)) {
-  jobs.push({ name: id, id, dur: len ? len + 8 : 60, chapter: len });
-}
-jobs.push({ name: 'nine-brush', id: 'nine', dur: 30, chapter: 80, brush: true });
-jobs.push({ name: 'seventytwo-brush', id: 'seventytwo', dur: 30, chapter: 95, brush: true });
-jobs.push({ name: 'nine-end', id: 'nine', dur: 42, chapter: 80, endAt: 30 });
-if (flag('--bristle')) jobs.push({ name: 'nine-bristle', id: 'nine', dur: 30, chapter: 80, brush: true, solo: 'bristle' });
-if (flag('--balance')) {
-  for (const id of Object.keys(LENGTHS)) {
-    jobs.push({ name: `${id}-music`, id, dur: 40, chapter: LENGTHS[id], solo: 'music' });
-    jobs.push({ name: `${id}-amb`, id, dur: 40, chapter: LENGTHS[id], solo: 'amb' });
+/** Chapter lengths come from the scores themselves; loops (length 0) render 60 s. */
+function makeJobs(lengths) {
+  const jobs = [];
+  for (const [id, len] of Object.entries(lengths)) jobs.push({ name: id, id, dur: len ? len + 8 : 60, chapter: len });
+  jobs.push({ name: 'nine-brush', id: 'nine', dur: 30, chapter: lengths.nine, brush: true });
+  jobs.push({ name: 'seventytwo-brush', id: 'seventytwo', dur: 30, chapter: lengths.seventytwo, brush: true });
+  jobs.push({ name: 'nine-end', id: 'nine', dur: 42, chapter: lengths.nine, endAt: 30 });
+  if (flag('--bristle')) jobs.push({ name: 'nine-bristle', id: 'nine', dur: 30, chapter: lengths.nine, brush: true, solo: 'bristle' });
+  if (flag('--balance')) {
+    for (const [id, len] of Object.entries(lengths)) {
+      jobs.push({ name: `${id}-music`, id, dur: 40, chapter: len, solo: 'music' });
+      jobs.push({ name: `${id}-amb`, id, dur: 40, chapter: len, solo: 'amb' });
+    }
   }
+  return only ? jobs.filter((j) => only.includes(j.id) || only.includes(j.name)) : jobs;
 }
-const selected = only ? jobs.filter((j) => only.includes(j.id) || only.includes(j.name)) : jobs;
 
 function listenerPid() {
   try {
@@ -109,8 +105,12 @@ try {
 
 async function renderAll(page) {
   await page.goto(`http://127.0.0.1:${PORT}/audio.html`);
+  const lengths = await page.evaluate(async () => {
+    const { SCORES } = await import('/src/audio/scores/index.ts');
+    return Object.fromEntries(Object.entries(SCORES).map(([id, def]) => [id, def.loop ? 0 : def.length]));
+  });
   const rows = [];
-  for (const job of selected) {
+  for (const job of makeJobs(lengths)) {
     const res = await page.evaluate(async ({ job, sr }) => {
       const { renderOffline } = await import('/src/audio/offline.ts');
       const { levels, wav, checkScore, checkBrush } = await import('/src/audio/analysis.ts');

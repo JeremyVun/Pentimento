@@ -66,8 +66,16 @@ function get(a: Asset): AudioBuffer {
   return b;
 }
 
-export function toneBuffer(id: ToneId, midi: number): AudioBuffer {
-  return get({ kind: 'tone', id, n: midi });
+/** Neighbouring semitones share one buffer, the odd one played a semitone up, which halves memory. */
+export function toneAsset(id: ToneId, midi: number): { asset: Asset; detune: number } {
+  const m = clamp(Math.round(midi), 21, 108);
+  const base = m - (m & 1);
+  return { asset: { kind: 'tone', id, n: base }, detune: (m - base) * 100 };
+}
+
+export function toneBuffer(id: ToneId, midi: number): { buffer: AudioBuffer; detune: number } {
+  const { asset, detune } = toneAsset(id, midi);
+  return { buffer: get(asset), detune };
 }
 
 export function ambBuffer(id: AmbToneId, variant: number): AudioBuffer {
@@ -209,8 +217,8 @@ function musicbox(midi: number): Raw {
   const tau = clamp(2.2 * Math.pow(2, -(midi - 72) / 20), 0.7, 3.6);
   return struck(
     midi,
-    32000,
-    Math.min(6, tau * 6),
+    24000,
+    Math.min(5, tau * 5),
     [
       { f, a: 1, tau },
       { f: f * 1.0017, a: 0.2, tau: tau * 0.85, phase: 1.3 },
@@ -228,8 +236,8 @@ function celesta(midi: number): Raw {
   const tau = clamp(1.7 * Math.pow(2, -(midi - 72) / 22), 0.6, 3);
   return struck(
     midi,
-    32000,
-    Math.min(5, tau * 6),
+    24000,
+    Math.min(4.5, tau * 5),
     [
       { f, a: 1, tau },
       { f: f * 2, a: 0.07, tau: tau * 0.4 },
@@ -246,7 +254,7 @@ function marimba(midi: number): Raw {
   const tau = clamp(0.75 * Math.pow(2, -(midi - 60) / 20), 0.22, 1.4);
   return struck(
     midi,
-    32000,
+    24000,
     tau * 6 + 0.1,
     [
       { f, a: 1, tau },
@@ -263,8 +271,8 @@ function kalimba(midi: number): Raw {
   const tau = clamp(1.3 * Math.pow(2, -(midi - 67) / 24), 0.5, 2.2);
   return struck(
     midi,
-    32000,
-    tau * 6,
+    24000,
+    Math.min(5, tau * 5),
     [
       { f, a: 1, tau },
       { f: f * 2, a: 0.05, tau: tau * 0.5 },
@@ -281,8 +289,8 @@ function glass(midi: number): Raw {
   const tau = clamp(3.2 * Math.pow(2, -(midi - 72) / 24), 1.2, 5);
   return struck(
     midi,
-    32000,
-    Math.min(8, tau * 5),
+    24000,
+    Math.min(6, tau * 4),
     [
       { f, a: 1, tau },
       { f: f * 1.0009, a: 0.3, tau, phase: 2 },
@@ -297,7 +305,7 @@ function glass(midi: number): Raw {
 
 /** Karplus-Strong string with a fractional-delay allpass for accurate tuning. */
 function karplus(midi: number, bright: number, t60: number, seconds: number): Raw {
-  const sr = 32000;
+  const sr = 24000;
   const f0 = hz(midi);
   const period = sr / f0;
   let L = Math.floor(period - 0.5);

@@ -148,6 +148,8 @@ export class Synth {
   /** Most voices ever sounding at once, and how many were stolen to stay under the cap. */
   peakVoices = 0;
   stolen = 0;
+  private made = 0;
+  private freed = 0;
   readonly outs: Outs;
   readonly bristle: GainNode;
   private readonly voices: Voice[] = [];
@@ -300,9 +302,6 @@ export class Synth {
     g.linearRampToValueAtTime(muted ? 0 : 1, at + 0.3);
   }
 
-  private made = 0;
-  private freed = 0;
-
   /** Voices whose nodes are still connected. */
   get voiceCount(): number {
     return this.made - this.freed;
@@ -352,10 +351,10 @@ export class Synth {
     if (ev.inst === 'bass') return this.bass(ev, when, outs, owner);
     const c = this.ctx;
     const p = TONES[ev.inst];
-    const buf = toneBuffer(ev.inst, ev.midi);
+    const { buffer: buf, detune } = toneBuffer(ev.inst, ev.midi);
     const src = c.createBufferSource();
     src.buffer = buf;
-    src.detune.value = (this.rand() - 0.5) * p.detune;
+    src.detune.value = detune + (this.rand() - 0.5) * p.detune;
     const lp = c.createBiquadFilter();
     lp.type = 'lowpass';
     lp.Q.value = 0.3;
@@ -365,7 +364,7 @@ export class Synth {
     const atk = Math.max(ev.attack ?? p.attack, 0.001);
     g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(amp, when + atk);
-    let stop = when + buf.duration;
+    let stop = when + buf.duration / Math.pow(2, detune / 1200);
     if (p.damped) {
       const off = when + Math.max(ev.dur, atk + 0.05);
       if (off < stop) {
