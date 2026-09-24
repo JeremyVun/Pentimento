@@ -5,7 +5,7 @@ import { bars, hold, lines, roll, tailPad } from './common';
 const key = { tonic: 79, scale: MAJOR };
 
 const BOUNCE = [1, 0.62, 0.85, 0.7, 0.95, 0.62, 0.88, 0.72];
-const mar = (vel: number) => ({ lo: 59, hi: 74, count: 3, vel, bassLo: 43, bassHi: 55, accents: BOUNCE, layer: 'mar' });
+const mar = (vel: number) => ({ lo: 55, hi: 71, count: 3, vel, bassLo: 43, bassHi: 55, accents: BOUNCE, layer: 'mar' });
 
 function birds(w: Writer, bar: number, n: number): void {
   w.scatter('bird', w.at(bar), w.at(bar + n), 3, 6, 0.8);

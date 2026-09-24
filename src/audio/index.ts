@@ -1,5 +1,6 @@
 import { Brush, type BrushTarget } from './brush';
 import type { Composition } from './compose';
+import { engineStats } from './debug';
 import { ScorePlayer } from './player';
 import { compose, SCORES, SCORE_IDS } from './scores';
 import { Synth } from './synth';
@@ -22,7 +23,7 @@ export interface AudioEngine {
   liftLayer(id: ScoreId | null): void;
 }
 
-export const LOOKAHEAD = 0.13;
+const LOOKAHEAD = 0.13;
 const TICK_MS = 25;
 const CROSSFADE = 3;
 
@@ -129,7 +130,7 @@ export function createAudioEngine(): AudioEngine {
     }
   }
 
-  return {
+  const engine: AudioEngine = {
     async unlock() {
       if (!ctx) {
         ctx = new AudioContext({ latencyHint: 'interactive' });
@@ -202,4 +203,14 @@ export function createAudioEngine(): AudioEngine {
       if (current) current.mode = liftMode();
     },
   };
+  engineStats.set(engine, () => ({
+    state: ctx?.state ?? 'none',
+    time: ctx?.currentTime ?? 0,
+    voices: synth?.voiceCount ?? 0,
+    peakVoices: synth?.peakVoices ?? 0,
+    stolen: synth?.stolen ?? 0,
+    players: (current ? 1 : 0) + fading.length,
+    score: currentId,
+  }));
+  return engine;
 }

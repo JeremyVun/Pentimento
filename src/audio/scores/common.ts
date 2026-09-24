@@ -1,6 +1,11 @@
 import type { InstId, PadId, Span, Writer } from '../compose';
 import { chord, noteToMidi, type Key } from '../theory';
 
+/** The same lines an octave higher. */
+export function octaveUp(text: readonly string[]): string[] {
+  return text.map((t) => t.replace(/([A-G][#b]?)(-?\d)/g, (_, n: string, o: string) => n + (Number(o) + 1)));
+}
+
 export function bars(w: Writer, bar: number, progs: readonly string[], each: (spans: Span[], b: number, i: number) => void, key?: Key): void {
   progs.forEach((p, i) => each(w.prog(bar + i, p, key), bar + i, i));
 }

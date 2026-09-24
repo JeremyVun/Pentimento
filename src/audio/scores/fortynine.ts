@@ -5,10 +5,10 @@ import { bars, hold, lines, roll, tailPad } from './common';
 const key = { tonic: 67, scale: MIXOLYDIAN };
 const BELL = 62;
 
-const lh = (vel: number) => ({ lo: 50, hi: 64, count: 3, vel, bassLo: 38, bassHi: 49, layer: 'lh' });
+const lh = (vel: number) => ({ lo: 45, hi: 59, count: 3, vel, bassLo: 33, bassHi: 44, layer: 'lh' });
 
 function horn(w: Writer, bar: number, s: Span[], vel: number): void {
-  w.pad('horn', bar, s, { lo: 50, hi: 67, count: 3, vel, attack: 0.9, release: 1.8 });
+  w.pad('horn', bar, s, { lo: 46, hi: 62, count: 3, vel, attack: 0.9, release: 1.8 });
 }
 
 const intro: Section = {

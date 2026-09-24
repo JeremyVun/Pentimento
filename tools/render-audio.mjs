@@ -9,6 +9,12 @@
  * dev server on 127.0.0.1:5327 (strict port, with its dependency cache inside outDir), checks the
  * listener belongs to this process and runs from this checkout, and closes it when done.
  *
+ *   node tools/render-audio.mjs --soak 15
+ *
+ * --soak N runs the live engine in real time for N minutes instead: it cycles through every score,
+ * paints non-stop, wakes things, ducks and mutes, and prints once a minute how many voices are still
+ * connected, how many Web Audio nodes are still alive after a forced garbage collection, and the JS heap.
+ *
  * For each score it prints peak and RMS in dBFS, the longest near-silent stretch of the whole mix
  * (below -50 dBFS) and of the music alone (below -48 dBFS), how many window-theme statements it
  * holds, and any pitches outside the chord or scale. Chapters render at their contract length plus
@@ -34,10 +40,11 @@ const opt = (name) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1] === '--only'));
+const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && ['--only', '--soak'].includes(args[i - 1])));
 const outDir = positional[0] ? path.resolve(positional[0]) : fs.mkdtempSync(path.join(os.tmpdir(), 'pentimento-render-'));
 fs.mkdirSync(outDir, { recursive: true });
 const only = opt('--only')?.split(',');
+const soakMinutes = Number(opt('--soak') ?? 0);
 const writeWav = !flag('--no-wav');
 
 const LENGTHS = {
@@ -90,11 +97,18 @@ try {
   const cwd = execSync(`lsof -a -p ${process.pid} -d cwd -Fn`, { encoding: 'utf8' }).split('\n').find((l) => l.startsWith('n'))?.slice(1);
   if (cwd !== root) throw new Error(`listener cwd is ${cwd}, expected ${root}`);
 
-  browser = await chromium.launch();
+  browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--enable-precise-memory-info'] });
   const page = await browser.newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
-  await page.goto(`http://127.0.0.1:${PORT}/audio.html`);
+  if (soakMinutes) await soak(page, soakMinutes);
+  else await renderAll(page);
+} finally {
+  await browser?.close();
+  await server.close();
+}
 
+async function renderAll(page) {
+  await page.goto(`http://127.0.0.1:${PORT}/audio.html`);
   const rows = [];
   for (const job of selected) {
     const res = await page.evaluate(async ({ job, sr }) => {
@@ -164,8 +178,78 @@ try {
     process.stdout.write(`rendered ${job.name}\n`);
   }
   console.table(rows);
-  console.log(`WAVs in ${outDir}`);
-} finally {
-  await browser?.close();
-  await server.close();
+  if (writeWav) console.log(`WAVs in ${outDir}`);
+}
+
+async function soak(page, minutes) {
+  await page.addInitScript(() => {
+    const counts = { created: 0, collected: 0 };
+    const registry = new FinalizationRegistry(() => counts.collected++);
+    for (const name of Object.getOwnPropertyNames(BaseAudioContext.prototype)) {
+      if (!name.startsWith('create') || name === 'createBuffer' || name === 'createPeriodicWave') continue;
+      const original = BaseAudioContext.prototype[name];
+      BaseAudioContext.prototype[name] = function (...a) {
+        const node = original.apply(this, a);
+        counts.created++;
+        registry.register(node, 0);
+        return node;
+      };
+    }
+    window.__nodes = counts;
+  });
+  await page.goto(`http://127.0.0.1:${PORT}/audio.html`);
+  const cdp = await page.context().newCDPSession(page);
+  await page.evaluate(async () => {
+    const { createAudioEngine } = await import('/src/audio/index.ts');
+    const { engineStats } = await import('/src/audio/debug.ts');
+    const { strokeAt } = await import('/src/audio/offline.ts');
+    const e = createAudioEngine();
+    window.__stats = () => engineStats.get(e)();
+    await e.unlock();
+    const ids = ['title', 'nine', 'sixteen', 'twentythree', 'thirtyone', 'fortyfour', 'fortynine', 'seventytwo', 'eightysix', 'later', 'lift'];
+    let n = 0;
+    const next = () => {
+      const id = ids[n % ids.length];
+      e.play(id, 35);
+      const early = n % 2 === 1;
+      n++;
+      setTimeout(() => {
+        e.endChapter();
+        setTimeout(next, 4000);
+      }, early ? 22000 : 40000);
+    };
+    next();
+    const started = performance.now();
+    let down = false;
+    setInterval(() => {
+      const s = strokeAt((performance.now() - started) / 1000);
+      if (s.down) {
+        e.brush(s.x, s.y, s.speed);
+        down = true;
+      } else if (down) {
+        e.brushUp();
+        down = false;
+      }
+    }, 16);
+    setInterval(() => e.wake(Math.random()), 7000);
+    let ducked = false;
+    setInterval(() => e.duck((ducked = !ducked)), 9000);
+    setInterval(() => {
+      e.setMuted(true);
+      setTimeout(() => e.setMuted(false), 1500);
+    }, 97000);
+    const layers = [null, ...ids.filter((id) => id !== 'lift')];
+    let li = 0;
+    setInterval(() => e.liftLayer(layers[li++ % layers.length]), 5000);
+  });
+  const rows = [];
+  for (let m = 1; m <= minutes; m++) {
+    await new Promise((r) => setTimeout(r, 60000));
+    await cdp.send('HeapProfiler.collectGarbage');
+    await new Promise((r) => setTimeout(r, 500));
+    const s = await page.evaluate(() => ({ ...window.__stats(), nodes: window.__nodes.created - window.__nodes.collected, created: window.__nodes.created, heap: performance.memory.usedJSHeapSize }));
+    rows.push({ minute: m, score: s.score, 'ctx time': s.time.toFixed(0), voices: s.voices, peak: s.peakVoices, stolen: s.stolen, players: s.players, 'nodes alive': s.nodes, 'nodes made': s.created, 'heap MB': (s.heap / 1e6).toFixed(1) });
+    console.log(JSON.stringify(rows[rows.length - 1]));
+  }
+  console.table(rows);
 }

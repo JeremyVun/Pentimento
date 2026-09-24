@@ -298,8 +298,12 @@ export class Synth {
     g.linearRampToValueAtTime(muted ? 0 : 1, at + 0.3);
   }
 
+  private made = 0;
+  private freed = 0;
+
+  /** Voices whose nodes are still connected. */
   get voiceCount(): number {
-    return this.voices.filter((v) => !v.done).length;
+    return this.made - this.freed;
   }
 
   private register(v: Voice): void {
@@ -317,10 +321,11 @@ export class Synth {
       this.stolen++;
     }
     this.voices.push(v);
-    const last = v.srcs[0];
-    last.onended = () => {
+    this.made++;
+    v.srcs[0].onended = () => {
       if (v.done) return;
       v.done = true;
+      this.freed++;
       for (const n of v.nodes) n.disconnect();
     };
   }

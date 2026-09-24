@@ -8,7 +8,7 @@ const BELL = 62;
 
 /** A single low note held under the bar, and sometimes a soft dyad on beat three. */
 function lh(w: Writer, bar: number, s: Span[], dyad: boolean, vel = 0.3): void {
-  w.arp('piano', bar, s, dyad ? 'B . . . 1 2 . .' : 'B . . . . . . .', { lo: 52, hi: 64, count: 3, vel, bassLo: 40, bassHi: 51, layer: 'lh', bus: 'wet' });
+  w.arp('piano', bar, s, dyad ? 'B . . . 1 2 . .' : 'B . . . . . . .', { lo: 48, hi: 60, count: 3, vel, bassLo: 36, bassHi: 47, layer: 'lh', bus: 'wet' });
 }
 
 function robin(w: Writer, bar: number, n: number): void {

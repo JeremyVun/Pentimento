@@ -5,7 +5,7 @@ import { bars, hold, lines, roll, tailPad } from './common';
 const key = { tonic: 72, scale: MAJOR };
 const keyD = { tonic: 74, scale: MAJOR };
 
-const pluck = { lo: 60, hi: 76, count: 3, vel: 0.32, bassLo: 48, layer: 'pl' };
+const pluck = { lo: 52, hi: 67, count: 3, vel: 0.32, bassLo: 43, bassHi: 54, layer: 'pl' };
 
 function accomp(w: Writer, bar: number, s: Span[], pad: number, bass: number): void {
   w.arp('pluck', bar, s, 'B 0 1 2 1 2 0 2', pluck);

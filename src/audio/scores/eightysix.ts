@@ -7,12 +7,12 @@ const SOFT = { bus: 'wet' as const, attack: 0.05, bright: 0.75 };
 const MOTIF = { stretch: 2, only: [0, 1, 2, 3, 4, 5], hold: 1.1, ...SOFT };
 
 function wash(w: Writer, bar: number, s: Span[], vel: number): void {
-  w.pad('pad', bar, s, { lo: 56, hi: 75, count: 4, vel, attack: 2.5, release: 4, bus: 'wet', bright: 0.8 });
+  w.pad('pad', bar, s, { lo: 53, hi: 70, count: 4, vel, attack: 2.5, release: 4, bus: 'wet', bright: 0.8 });
   w.pad('shimmer', bar, s, { lo: 68, hi: 84, count: 3, vel: vel * 0.8, bus: 'wet' });
 }
 
 function lh(w: Writer, bar: number, s: Span[], vel: number): void {
-  w.arp('piano', bar, s, 'B 1 2 3', { lo: 56, hi: 70, count: 3, vel, bassLo: 37, bassHi: 48, sub: 1, layer: 'lh', ...SOFT });
+  w.arp('piano', bar, s, 'B 1 2 3', { lo: 51, hi: 65, count: 3, vel, bassLo: 37, bassHi: 48, sub: 1, layer: 'lh', ...SOFT });
 }
 
 function birds(w: Writer, bar: number, n: number): void {
@@ -24,7 +24,7 @@ const intro: Section = {
   write(w, b) {
     bars(w, b, ['Db', 'Gbmaj7', 'Db/F', 'Gbmaj7'], (s, bar) => {
       wash(w, bar, s, 0.5);
-      w.arp('piano', bar, s, 'B . 1 . 2 . 3 .', { lo: 60, hi: 75, count: 3, vel: 0.28, bassLo: 37, bassHi: 48, layer: 'lh', ...SOFT });
+      w.arp('piano', bar, s, 'B . 1 . 2 . 3 .', { lo: 53, hi: 67, count: 3, vel: 0.28, bassLo: 37, bassHi: 48, layer: 'lh', ...SOFT });
     });
     birds(w, b, 4);
   },
