@@ -120,6 +120,7 @@ export const later: ScoreDef = {
     w.scatter('swallow', w.at(b) + 1, w.at(b) + 8, 2, 4, 0.8, 0.5, 1);
   },
   tail(w) {
+    w.key = keyD;
     const t = tailPad(w, 'pad', 'D', 4, { lo: 57, hi: 74, count: 3, vel: 0.3 });
     w.note('musicbox', 93, 1, 0, 1, 0.22, { pan: 0.3 });
     w.note('musicbox', 90, 3, 0, 1, 0.18, { pan: -0.2 });

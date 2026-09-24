@@ -420,6 +420,13 @@ function fit(def: ScoreDef, target: number): Section[] {
   return chosen;
 }
 
+/** Moves timed bed changes (the rain easing) with the chapter when it is fitted to another length. */
+function scaleBed(bed: BedSpec, k: number): BedSpec {
+  const ease = bed.rain?.ease;
+  if (!bed.rain || !ease || k === 1) return bed;
+  return { ...bed, rain: { ...bed.rain, ease: { ...ease, at: ease.at * k, over: ease.over * Math.min(1, k) } } };
+}
+
 export function build(def: ScoreDef, durationSec?: number): Composition {
   const nominalBar = (def.beatsPerBar * 60) / def.bpm;
   let sections = def.sections;
@@ -467,7 +474,7 @@ export function build(def: ScoreDef, durationSec?: number): Composition {
     tail,
     chords,
     cadence,
-    bed: def.bed,
+    bed: scaleBed(def.bed, def.loop ? 1 : end / def.length),
     mix: def.mix,
     brush: def.brush,
   };
