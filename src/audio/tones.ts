@@ -161,13 +161,13 @@ function fadeTail(out: Float32Array, sr: number, sec = 0.05): void {
   for (let i = 0; i < n; i++) out[out.length - 1 - i] *= i / n;
 }
 
-const PIANO_SR = 22050;
+const PIANO_SR = 16000;
 
 function piano(midi: number): Raw {
   const sr = PIANO_SR;
   const f0 = hz(midi);
   const r = rng(midi * 7919 + 13);
-  const len = Math.round(sr * clamp(8 - (midi - 36) * 0.085, 2.6, 8));
+  const len = Math.round(sr * clamp(6.5 - (midi - 36) * 0.075, 2.4, 6.5));
   const out = new Float32Array(len);
   const inharm = 0.00012 * Math.pow(2, ((midi - 40) / 12) * 0.9);
   const tau1 = clamp(5.5 * Math.pow(2, -(midi - 43) / 16), 0.8, 8);
@@ -218,7 +218,7 @@ function musicbox(midi: number): Raw {
   return struck(
     midi,
     24000,
-    Math.min(5, tau * 5),
+    Math.min(4.5, tau * 4.5),
     [
       { f, a: 1, tau },
       { f: f * 1.0017, a: 0.2, tau: tau * 0.85, phase: 1.3 },
@@ -237,7 +237,7 @@ function celesta(midi: number): Raw {
   return struck(
     midi,
     24000,
-    Math.min(4.5, tau * 5),
+    Math.min(4, tau * 4.5),
     [
       { f, a: 1, tau },
       { f: f * 2, a: 0.07, tau: tau * 0.4 },
@@ -255,7 +255,7 @@ function marimba(midi: number): Raw {
   return struck(
     midi,
     24000,
-    tau * 6 + 0.1,
+    Math.min(4, tau * 5 + 0.1),
     [
       { f, a: 1, tau },
       { f: f * 3.93, a: 0.2, tau: tau * 0.22 },
@@ -272,7 +272,7 @@ function kalimba(midi: number): Raw {
   return struck(
     midi,
     24000,
-    Math.min(5, tau * 5),
+    Math.min(4, tau * 4),
     [
       { f, a: 1, tau },
       { f: f * 2, a: 0.05, tau: tau * 0.5 },
@@ -289,8 +289,8 @@ function glass(midi: number): Raw {
   const tau = clamp(3.2 * Math.pow(2, -(midi - 72) / 24), 1.2, 5);
   return struck(
     midi,
-    24000,
-    Math.min(6, tau * 4),
+    16000,
+    Math.min(5, tau * 3.5),
     [
       { f, a: 1, tau },
       { f: f * 1.0009, a: 0.3, tau, phase: 2 },
