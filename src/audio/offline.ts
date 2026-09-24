@@ -14,6 +14,8 @@ export interface RenderOptions {
   /** Return four channels: the master mix, then the music bus alone (for gap analysis). */
   stems?: boolean;
   onBrushNote?: (note: BrushNote) => void;
+  /** Silence the ambience or the music, for balancing. */
+  solo?: 'music' | 'amb';
 }
 
 const FPS = 60;
@@ -37,7 +39,8 @@ export async function renderOffline(id: ScoreId, durationSec: number, sampleRate
   const ctx = new OfflineAudioContext(opts.stems ? 4 : 2, Math.ceil(durationSec * sampleRate), sampleRate);
   const synth = new Synth(ctx, { stems: opts.stems });
   const comp = compose(id, opts.chapterSec);
-  synth.setMix(comp.mix, 0, 0.01);
+  const solo = opts.solo;
+  synth.setMix({ ...comp.mix, music: solo === 'amb' ? 0 : comp.mix.music, amb: solo === 'music' ? 0 : comp.mix.amb }, 0, 0.01);
   const player = new ScorePlayer(synth, comp, 0.1, 0.8);
   const endAt = opts.endAt;
 

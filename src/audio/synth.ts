@@ -73,6 +73,30 @@ const AMBS: Record<AmbToneId, AmbPatch> = {
   thunder: { level: 1.3, bus: 'amb' },
 };
 
+/** Level into the master compressor; the voices are balanced well below full scale. */
+const MASTER_GAIN = 2.5;
+/** Ambience sits under the music; per-score levels are relative to this. */
+const AMB_TRIM = 0.25;
+
+function compressor(c: BaseAudioContext, threshold: number, ratio: number, attack: number, release: number): DynamicsCompressorNode {
+  const n = c.createDynamicsCompressor();
+  n.threshold.value = threshold;
+  n.knee.value = 0;
+  n.ratio.value = ratio;
+  n.attack.value = attack;
+  n.release.value = release;
+  return n;
+}
+
+/**
+ * Web Audio compressors add automatic makeup gain of (1 / gain at 0 dBFS) ^ 0.6.
+ * This undoes it (exact for a hard knee) so the thresholds mean what they say.
+ */
+function unMakeup(threshold: number, ratio: number): number {
+  const gainAtFullScaleDb = threshold * (1 - 1 / ratio);
+  return Math.pow(10, (0.6 * gainAtFullScaleDb) / 20);
+}
+
 function softClipCurve(): Float32Array<ArrayBuffer> {
   const n = 4097;
   const curve = new Float32Array(n);
@@ -126,7 +150,6 @@ export class Synth {
   private readonly sends: Record<Bus, GainNode>;
   private readonly ducks: GainNode[] = [];
   private readonly mute: GainNode;
-  private readonly lfos: OscillatorNode[] = [];
 
   constructor(readonly ctx: BaseAudioContext, opts: { stems?: boolean } = {}) {
     const c = ctx;
@@ -135,23 +158,13 @@ export class Synth {
       g.gain.value = v;
       return g;
     };
-    const masterSum = gain(1);
-    const comp = c.createDynamicsCompressor();
-    comp.threshold.value = -22;
-    comp.knee.value = 12;
-    comp.ratio.value = 2.5;
-    comp.attack.value = 0.02;
-    comp.release.value = 0.3;
-    const lim = c.createDynamicsCompressor();
-    lim.threshold.value = -9;
-    lim.knee.value = 0;
-    lim.ratio.value = 20;
-    lim.attack.value = 0.002;
-    lim.release.value = 0.12;
+    const masterSum = gain(MASTER_GAIN);
+    const comp = compressor(c, -18, 2, 0.03, 0.35);
+    const lim = compressor(c, -4, 20, 0.001, 0.1);
     const clip = c.createWaveShaper();
     clip.curve = softClipCurve();
     this.mute = gain(1);
-    masterSum.connect(comp).connect(lim).connect(clip).connect(this.mute);
+    masterSum.connect(comp).connect(gain(unMakeup(-18, 2))).connect(lim).connect(gain(unMakeup(-4, 20))).connect(clip).connect(this.mute);
 
     const reverb = c.createConvolver();
     reverb.normalize = false;
@@ -166,7 +179,6 @@ export class Synth {
     flutter.frequency.value = 5.3;
     const flutterDepth = gain(0.00004);
     flutter.connect(flutterDepth);
-    this.lfos.push(wow, flutter);
 
     const musicTap = opts.stems ? gain(1) : null;
     const ins = {} as Record<Bus, GainNode>;
@@ -260,8 +272,8 @@ export class Synth {
     };
     ramp(this.ins.dry.gain, m.music);
     ramp(this.ins.wet.gain, m.music);
-    ramp(this.ins.amb.gain, m.amb);
-    ramp(this.ins.far.gain, m.amb);
+    ramp(this.ins.amb.gain, m.amb * AMB_TRIM);
+    ramp(this.ins.far.gain, m.amb * AMB_TRIM);
     ramp(this.sends.dry.gain, m.dryVerb);
     ramp(this.sends.wet.gain, m.wetVerb);
   }

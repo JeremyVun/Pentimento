@@ -184,7 +184,6 @@ export interface MotifOpts {
   attack?: number;
   bright?: number;
   pan?: number;
-  degs?: boolean;
   hold?: number;
 }
 
@@ -268,7 +267,7 @@ export class Writer {
         attack: o.attack,
         bright: o.bright,
         pan: o.pan ?? 0,
-        deg: o.degs ? step : undefined,
+        deg: step,
       });
     }
   }
@@ -439,7 +438,7 @@ export function build(def: ScoreDef, durationSec?: number): Composition {
   if (!def.loop && def.tail) {
     const tw = new Writer(bpm, def.beatsPerBar, def.key, def.seed + 1);
     const { period } = def.tail(tw);
-    tail = { start: end + 5, period, events: tw.sorted() };
+    tail = { start: end + Math.ceil(5 / w.bar) * w.bar, period, events: tw.sorted() };
   }
 
   const cadence = (t: number, key: Key): Ev[] => {

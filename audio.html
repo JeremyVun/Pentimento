@@ -2,9 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pentimento audio bench</title>
   </head>
   <body>
-    <p>Audio bench placeholder.</p>
+    <h1>Pentimento audio bench</h1>
+    <p id="scores"></p>
+    <p>
+      <label>Chapter length in seconds <input id="dur" type="number" min="10" max="300" placeholder="contract length" /></label>
+    </p>
+    <p>
+      <button id="end">End chapter</button>
+      <button id="wake">Wake</button>
+      <label><input id="duck" type="checkbox" /> Duck</label>
+      <label><input id="mute" type="checkbox" /> Mute</label>
+      <label>Lift layer <select id="layer"></select></label>
+    </p>
+    <p>Drag in the box to paint. Top is high, left and right pan.</p>
+    <div id="pad" style="width: 520px; height: 340px; border: 1px solid; touch-action: none; user-select: none"></div>
+    <pre id="status"></pre>
+    <script type="module" src="/src/audio/bench.ts"></script>
   </body>
 </html>

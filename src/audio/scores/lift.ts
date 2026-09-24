@@ -30,14 +30,14 @@ export const lift: ScoreDef = {
           w.pad('shimmer', bar, s, { lo: 70, hi: 86, count: 2, vel: 0.3, bus: 'wet' });
           w.pad('lowpad', bar, s, { lo: 39, hi: 51, count: 1, vel: 0.5, attack: 3, release: 4 });
         });
-        const deg = { degs: true, bus: 'wet' as const };
-        w.motif('musicbox', b, -6, { vel: 0.5, oct: 1, only: [6], ...deg });
-        w.motif('musicbox', b + 1, 0, { vel: 0.46, oct: 1, only: [0, 1, 2, 3], stretch: 1.5, ...deg });
-        w.motif('piano', b + 4, -4, { vel: 0.42, only: [4, 5, 6], stretch: 1.5, ...deg, attack: 0.04 });
-        w.motif('glass', b + 6, 0, { vel: 0.4, only: [0, 1], stretch: 2, ...deg });
-        w.motif('musicbox', b + 9, -1, { vel: 0.44, oct: 1, only: [1, 2, 3], stretch: 1.5, ...deg });
-        w.motif('piano', b + 11, 0, { vel: 0.44, only: [0, 1, 2, 3, 4, 5], stretch: 1.5, ...deg, attack: 0.04 });
-        w.motif('glass', b + 14, 2, { vel: 0.3, oct: 1, only: [0], ...deg });
+        const wet = { bus: 'wet' as const };
+        w.motif('musicbox', b, -6, { vel: 0.5, oct: 1, only: [6], ...wet });
+        w.motif('musicbox', b + 1, 0, { vel: 0.46, oct: 1, only: [0, 1, 2, 3], stretch: 1.5, ...wet });
+        w.motif('piano', b + 4, -4, { vel: 0.42, only: [4, 5, 6], stretch: 1.5, ...wet, attack: 0.04 });
+        w.motif('glass', b + 6, 0, { vel: 0.4, only: [0, 1], stretch: 2, ...wet });
+        w.motif('musicbox', b + 9, -1, { vel: 0.44, oct: 1, only: [1, 2, 3], stretch: 1.5, ...wet });
+        w.motif('piano', b + 11, 0, { vel: 0.44, only: [0, 1, 2, 3, 4, 5], stretch: 1.5, ...wet, attack: 0.04 });
+        w.motif('glass', b + 14, 2, { vel: 0.3, oct: 1, only: [0], ...wet });
       },
     },
   ],
