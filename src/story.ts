@@ -54,7 +54,7 @@ export const CHAPTERS: Chapter[] = [
     ],
     subjects: [
       { id: 'bridge', x: 0.76, y: 0.565, rx: 0.3, ry: 0.06, line: 'The builders came from the city. After school we sat on the bank and watched them work.' },
-      { id: 'ferry', x: 0.79, y: 0.675, rx: 0.27, ry: 0.035, line: 'Mr Aldous knew the bridge would put him out of work. He painted his boat anyway, bright blue.' },
+      { id: 'ferry', x: 0.79, y: 0.675, rx: 0.27, ry: 0.035, line: 'Mr Aldous knew the bridge would put him out of work. He painted his boat bright blue anyway.' },
       { id: 'fig', x: 0.2, y: 0.85, rx: 0.12, ry: 0.1, line: "The fig tree was taller than me by then. It still hadn't grown a single fig." },
     ],
     close: "I said I'd leave when I finished school. I didn't, and I'm still not sure why.",
@@ -87,8 +87,8 @@ export const CHAPTERS: Chapter[] = [
     ],
     subjects: [
       { id: 'washing', x: 0.26, y: 0.83, rx: 0.22, ry: 0.06, line: 'Joe hung the washing out every morning before work. He always pegged the socks in pairs.' },
-      { id: 'fig', x: 0.2, y: 0.68, rx: 0.2, ry: 0.14, line: 'The fig tree finally fruited that summer. My father ate the first fig standing under the tree.' },
-      { id: 'kids', x: 0.92, y: 0.6, rx: 0.12, ry: 0.07, line: "Children swam off the bridge, which wasn't allowed. I'd done it too, once." },
+      { id: 'fig', x: 0.2, y: 0.68, rx: 0.2, ry: 0.14, line: 'The fig tree grew its first figs that summer. My father ate the first one standing under the tree.' },
+      { id: 'kids', x: 0.92, y: 0.6, rx: 0.12, ry: 0.07, line: "Children jumped off the bridge into the river, which wasn't allowed. I'd done it too, once." },
     ],
     close: "She woke up before I'd finished the sky.",
     closeLow: "She woke up before I'd painted much at all.",
@@ -105,7 +105,7 @@ export const CHAPTERS: Chapter[] = [
     ],
     subjects: [
       { id: 'lanterns', x: 0.74, y: 0.53, rx: 0.33, ry: 0.04, line: 'The water came within a foot of the arches. Half the town stood on the bridge all night to watch.' },
-      { id: 'kitchen', x: 0.2, y: 0.95, rx: 0.17, ry: 0.07, line: "June was twelve. She sat up with me and didn't say much, and that helped." },
+      { id: 'kitchen', x: 0.2, y: 0.95, rx: 0.17, ry: 0.07, line: "June was thirteen. She sat up with me and didn't say much, and that helped." },
       { id: 'fig', x: 0.2, y: 0.7, rx: 0.18, ry: 0.16, line: 'My father used to sit under the fig tree after supper. I kept expecting to see him there.' },
     ],
     close: 'The flood broke a branch off his fig tree. In the spring, it grew new leaves around the break.',
