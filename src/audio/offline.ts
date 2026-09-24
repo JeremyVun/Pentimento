@@ -14,24 +14,35 @@ export interface RenderOptions {
   /** Return four channels: the master mix, then the music bus alone (for gap analysis). */
   stems?: boolean;
   onBrushNote?: (note: BrushNote) => void;
-  /** Silence the ambience or the music, for balancing. */
-  solo?: 'music' | 'amb';
+  /** Silence everything but the music, the ambience or the brush hiss, for balancing. */
+  solo?: 'music' | 'amb' | 'bristle';
+  onVoices?: (peak: number, stolen: number) => void;
 }
 
 const FPS = 60;
 const LOOKAHEAD = 0.13;
 
+function strokePos(u: number): { x: number; y: number } {
+  return {
+    x: 0.5 + 0.38 * Math.sin(u * 1.3) * Math.cos(u * 0.21),
+    y: 0.5 + 0.4 * Math.sin(u * 0.37 + 1) * Math.sin(u * 0.9),
+  };
+}
+
+/** Path time: strokes alternate between slow, steady painting and fast scrubbing. */
+function strokeClock(t: number): number {
+  const cycle = Math.floor(t / 6.5);
+  const within = t - cycle * 6.5;
+  return cycle * 6.5 * 2 + within * (cycle % 2 ? 3.5 : 1);
+}
+
 /** A looping, wandering stroke: mostly painting, lifting for a moment every few seconds. */
 export function strokeAt(t: number): { x: number; y: number; speed: number; down: boolean } {
-  const cycle = t % 6.5;
-  const down = cycle < 5.6;
-  const x = 0.5 + 0.38 * Math.sin(t * 1.3) * Math.cos(t * 0.21);
-  const y = 0.5 + 0.4 * Math.sin(t * 0.37 + 1) * Math.sin(t * 0.9);
+  const down = t % 6.5 < 5.6;
   const dt = 1 / FPS;
-  const x2 = 0.5 + 0.38 * Math.sin((t + dt) * 1.3) * Math.cos((t + dt) * 0.21);
-  const y2 = 0.5 + 0.4 * Math.sin((t + dt) * 0.37 + 1) * Math.sin((t + dt) * 0.9);
-  const speed = Math.hypot(x2 - x, y2 - y) / dt;
-  return { x, y, speed, down };
+  const a = strokePos(strokeClock(t));
+  const b = strokePos(strokeClock(t + dt));
+  return { ...a, speed: Math.hypot(b.x - a.x, b.y - a.y) / dt, down };
 }
 
 /** Renders `durationSec` seconds of a score with the same code the live engine uses. */
@@ -40,13 +51,20 @@ export async function renderOffline(id: ScoreId, durationSec: number, sampleRate
   const synth = new Synth(ctx, { stems: opts.stems });
   const comp = compose(id, opts.chapterSec);
   const solo = opts.solo;
-  synth.setMix({ ...comp.mix, music: solo === 'amb' ? 0 : comp.mix.music, amb: solo === 'music' ? 0 : comp.mix.amb }, 0, 0.01);
+  const music = solo === 'amb' || solo === 'bristle' ? 0 : comp.mix.music;
+  const amb = solo === 'music' || solo === 'bristle' ? 0 : comp.mix.amb;
+  synth.setMix({ ...comp.mix, music, amb, dryVerb: music ? comp.mix.dryVerb : 0, wetVerb: music ? comp.mix.wetVerb : 0 }, 0, 0.01);
+  const finish = async () => {
+    const buf = await ctx.startRendering();
+    opts.onVoices?.(synth.peakVoices, synth.stolen);
+    return buf;
+  };
   const player = new ScorePlayer(synth, comp, 0.1, 0.8);
   const endAt = opts.endAt;
 
   if (!opts.brush && endAt === undefined) {
     player.pump(durationSec);
-    return ctx.startRendering();
+    return finish();
   }
 
   const outs = synth.makeOuts(1).outs;
@@ -72,5 +90,5 @@ export async function renderOffline(id: ScoreId, durationSec: number, sampleRate
       wasDown = false;
     }
   }
-  return ctx.startRendering();
+  return finish();
 }

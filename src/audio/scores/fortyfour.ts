@@ -112,6 +112,6 @@ export const fortyfour: ScoreDef = {
     hold(w, 'lowpad', 'Cm', 0, 2, 9, { lo: 43, hi: 60, count: 3, vel: 0.45, release: 4 });
   },
   bed: { water: { level: 0.42, cutoff: 1900, roar: 0.5 }, rain: { level: 0.5, heavy: true } },
-  mix: { music: 1.1, amb: 0.95, dryVerb: 0.26, wetVerb: 0.5 },
+  mix: { music: 0.95, amb: 0.95, dryVerb: 0.26, wetVerb: 0.5 },
   brush: { inst: 'piano', lo: 48, hi: 72, vel: 0.38, bus: 'wet', dur: 1.4, bright: 0.6 },
 };

@@ -54,7 +54,7 @@ interface PadPatch {
 
 const PADS: Record<PadId, PadPatch> = {
   pad: { type: 'sawtooth', detune: 7, cutoff: 950, q: 0.5, attack: 1.2, release: 2.5, level: 0.05, octave: 0, vibrato: 0, swell: false },
-  lowpad: { type: 'triangle', detune: 5, cutoff: 650, q: 0.4, attack: 1.5, release: 3, level: 0.1, octave: 0, vibrato: 0, swell: false },
+  lowpad: { type: 'triangle', detune: 5, cutoff: 650, q: 0.4, attack: 1.5, release: 3, level: 0.075, octave: 0, vibrato: 0, swell: false },
   horn: { type: 'sawtooth', detune: 4, cutoff: 1000, q: 1.4, attack: 0.5, release: 1.4, level: 0.05, octave: 0, vibrato: 5, swell: true },
   shimmer: { type: 'sine', detune: 9, cutoff: 6000, q: 0.3, attack: 2, release: 3.5, level: 0.035, octave: 1, vibrato: 0, swell: false },
 };
@@ -143,6 +143,9 @@ function impulse(ctx: BaseAudioContext, seconds = 4.2, rt60 = 3.1): AudioBuffer 
 
 export class Synth {
   readonly rand = rng(20260924);
+  /** Most voices ever sounding at once, and how many were stolen to stay under the cap. */
+  peakVoices = 0;
+  stolen = 0;
   readonly outs: Outs;
   readonly bristle: GainNode;
   private readonly voices: Voice[] = [];
@@ -164,7 +167,10 @@ export class Synth {
     const clip = c.createWaveShaper();
     clip.curve = softClipCurve();
     this.mute = gain(1);
-    masterSum.connect(comp).connect(gain(unMakeup(-18, 2))).connect(lim).connect(gain(unMakeup(-4, 20))).connect(clip).connect(this.mute);
+    const rumble = c.createBiquadFilter();
+    rumble.type = 'highpass';
+    rumble.frequency.value = 32;
+    masterSum.connect(rumble).connect(comp).connect(gain(unMakeup(-18, 2))).connect(lim).connect(gain(unMakeup(-4, 20))).connect(clip).connect(this.mute);
 
     const reverb = c.createConvolver();
     reverb.normalize = false;
@@ -303,10 +309,12 @@ export class Synth {
       if (o.done || o.end < cutoff) this.voices.splice(i, 1);
     }
     const active = this.voices.filter((o) => !o.killed && o.end > v.start);
+    this.peakVoices = Math.max(this.peakVoices, Math.min(VOICE_CAP, active.length + 1));
     if (active.length >= VOICE_CAP) {
       let oldest = active[0];
       for (const o of active) if (o.start < oldest.start) oldest = o;
       this.fade(oldest, v.start, 0.05);
+      this.stolen++;
     }
     this.voices.push(v);
     const last = v.srcs[0];
@@ -372,7 +380,7 @@ export class Synth {
     const f = hz(ev.midi);
     const g = c.createGain();
     const kill = this.gain(1);
-    const amp = 0.24 * Math.pow(clamp(ev.vel, 0, 1), 1.4);
+    const amp = 0.13 * Math.pow(clamp(ev.vel, 0, 1), 1.4);
     const release = 0.3;
     const off = when + Math.max(0.08, ev.dur);
     g.gain.setValueAtTime(0, when);

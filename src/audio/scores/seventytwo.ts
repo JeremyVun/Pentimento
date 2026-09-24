@@ -104,6 +104,6 @@ export const seventytwo: ScoreDef = {
     w.note('piano', 69, 0, 2, 8, 0.44);
   },
   bed: { water: { level: 0.24, cutoff: 380 }, snow: 0.34 },
-  mix: { music: 1.15, amb: 0.9, dryVerb: 0.28, wetVerb: 0.55 },
+  mix: { music: 1.5, amb: 0.9, dryVerb: 0.28, wetVerb: 0.55 },
   brush: { inst: 'glass', lo: 69, hi: 93, vel: 0.38, bus: 'wet', dur: 2 },
 };

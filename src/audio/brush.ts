@@ -186,7 +186,7 @@ export class Brush {
     this.lastParam = now;
     const b = this.bristle;
     const k = clamp(speed / 2, 0, 1);
-    b.g.gain.setTargetAtTime(0.12 * Math.pow(k, 0.8), now, 0.05);
+    b.g.gain.setTargetAtTime(0.22 * Math.pow(k, 0.8), now, 0.05);
     b.bp.frequency.setTargetAtTime(1800 + 2600 * clamp(speed / 2.5, 0, 1), now, 0.06);
     b.pan.pan.setTargetAtTime(clamp((x - 0.5) * 1.2, -0.8, 0.8), now, 0.06);
   }

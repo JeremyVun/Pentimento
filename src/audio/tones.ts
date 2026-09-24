@@ -132,7 +132,7 @@ function piano(midi: number): AudioBuffer {
     const fn = n * f0 * Math.sqrt(1 + inharm * n * n);
     if (fn > 7200) break;
     const comb = Math.abs(Math.sin(Math.PI * n * 0.13));
-    const a = (1 / Math.pow(n, 0.85)) * Math.exp(-fn / 1500) * (0.3 + 0.7 * comb);
+    const a = (1 / Math.pow(n, 0.85)) * Math.exp(-fn / 1900) * (0.3 + 0.7 * comb);
     const tauN = tau1 / (1 + 0.2 * (n - 1) + fn / 2800);
     for (let s = 0; s < 3; s++) {
       if (!weights[s]) continue;

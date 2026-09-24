@@ -396,7 +396,10 @@ export interface ScoreDef {
   seed: number;
 }
 
-/** Picks sections so the chapter lands close to `target` bars, dropping or vamping as needed. */
+/**
+ * Picks sections so the chapter lands close to `target` bars: drops optional sections when short,
+ * repeats the middle sections when long, and pads the last few bars with a vamp. Tempo absorbs the rest.
+ */
 function fit(def: ScoreDef, target: number): Section[] {
   const chosen = [...def.sections];
   const total = () => chosen.reduce((n, s) => n + s.bars, 0);
@@ -406,8 +409,12 @@ function fit(def: ScoreDef, target: number): Section[] {
     chosen.splice(chosen.indexOf(s), 1);
   }
   while (total() - target >= 2 && chosen.length > 2) chosen.splice(chosen.length - 2, 1);
-  if (def.vamp) {
-    const extra = Math.round(target - total());
+  const middle = def.sections.slice(1, -1);
+  for (let k = 0; middle.length && target - total() >= middle[k % middle.length].bars * 0.75; k++) {
+    chosen.splice(chosen.length - 1, 0, middle[k % middle.length]);
+  }
+  const extra = Math.round(target - total());
+  if (def.vamp && extra / target > 0.03) {
     for (let i = 0; i < extra; i++) chosen.splice(chosen.length - 1, 0, def.vamp);
   }
   return chosen;

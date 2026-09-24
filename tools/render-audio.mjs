@@ -52,6 +52,7 @@ for (const [id, len] of Object.entries(LENGTHS)) {
 jobs.push({ name: 'nine-brush', id: 'nine', dur: 30, chapter: 80, brush: true });
 jobs.push({ name: 'seventytwo-brush', id: 'seventytwo', dur: 30, chapter: 95, brush: true });
 jobs.push({ name: 'nine-end', id: 'nine', dur: 42, chapter: 80, endAt: 30 });
+if (flag('--bristle')) jobs.push({ name: 'nine-bristle', id: 'nine', dur: 30, chapter: 80, brush: true, solo: 'bristle' });
 if (flag('--balance')) {
   for (const id of Object.keys(LENGTHS)) {
     jobs.push({ name: `${id}-music`, id, dur: 40, chapter: LENGTHS[id], solo: 'music' });
@@ -101,6 +102,7 @@ try {
       const { levels, wav, checkScore, checkBrush } = await import('/src/audio/analysis.ts');
       const { compose } = await import('/src/audio/scores/index.ts');
       const notes = [];
+      let voices = [0, 0];
       const started = performance.now();
       const buf = await renderOffline(job.id, job.dur, sr, {
         stems: true,
@@ -109,6 +111,7 @@ try {
         endAt: job.endAt,
         onBrushNote: (n) => notes.push(n),
         solo: job.solo,
+        onVoices: (peak, stolen) => (voices = [peak, stolen]),
       });
       const ms = performance.now() - started;
       const comp = compose(job.id, job.chapter || undefined);
@@ -118,7 +121,7 @@ try {
       const brush = job.brush ? checkBrush(notes, 0.1, comp.beat / 2, job.dur) : null;
       const bytes = wav(buf);
       window.__wav = bytes;
-      return { ms, lv, check, brush, size: bytes.length, end: comp.end, loop: comp.loop, bpm: comp.bpm };
+      return { ms, lv, check, brush, voices, size: bytes.length, end: comp.end, loop: comp.loop, bpm: comp.bpm };
     }, { job, sr: SR });
 
     if (writeWav) {
@@ -153,6 +156,7 @@ try {
       'off-key': res.check.offKey.length,
       'off-grid': res.check.offGrid.length,
       brush: res.brush ? `${res.brush.notes} notes, max ${res.brush.maxPerSecond}/s, off-grid ${res.brush.offGrid}, outside ${res.brush.outside}` : '',
+      voices: `${res.voices[0]}${res.voices[1] ? ` (${res.voices[1]} stolen)` : ''}`,
       'render ms': Math.round(res.ms),
     });
     if (res.check.offKey.length) console.log(`${job.name} off-key:`, res.check.offKey.slice(0, 8).join('; '));
