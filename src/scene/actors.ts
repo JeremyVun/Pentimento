@@ -601,14 +601,17 @@ export function drawWindow(ctx: CanvasRenderingContext2D, f: Frame): void {
   ctx.fillRect(inX1 - 0.003, inY0 - 0.025, 0.028, sillY - inY0 + 0.03);
   ctx.fillRect(inX0 - 0.025, inY0 - 0.025, inX1 - inX0 + 0.05, 0.028);
   const mx = A / 2;
-  ctx.fillRect(mx - 0.016, inY0, 0.032, sillY - inY0);
-  ctx.fillRect(inX0, 0.3, inX1 - inX0, 0.022);
-  ctx.fillStyle = lit;
-  ctx.fillRect(mx - 0.016, inY0, 0.006, sillY - inY0);
-  ctx.fillRect(inX0, 0.3, inX1 - inX0, 0.005);
-  ctx.fillStyle = dark;
-  ctx.fillRect(mx + 0.01, inY0, 0.006, sillY - inY0);
-  ctx.fillRect(inX0, 0.318, inX1 - inX0, 0.004);
+  // In the region map the bars are left out, so they don't cut the view into separate panes.
+  if (!f.region) {
+    ctx.fillRect(mx - 0.016, inY0, 0.032, sillY - inY0);
+    ctx.fillRect(inX0, 0.3, inX1 - inX0, 0.022);
+    ctx.fillStyle = lit;
+    ctx.fillRect(mx - 0.016, inY0, 0.006, sillY - inY0);
+    ctx.fillRect(inX0, 0.3, inX1 - inX0, 0.005);
+    ctx.fillStyle = dark;
+    ctx.fillRect(mx + 0.01, inY0, 0.006, sillY - inY0);
+    ctx.fillRect(inX0, 0.318, inX1 - inX0, 0.004);
+  }
 
   ctx.fillStyle = withAlpha('#ffffff', 0.08);
   poly(ctx, [[0.2, inY0], [0.32, inY0], [0.1, 0.5], [inX0, 0.5], [inX0, 0.4]]);

@@ -1,4 +1,4 @@
-// Plays the real game in Chrome with real mouse input and captures the board at each phase.
+// Plays the real game in Chrome with real mouse input (clicks and holds that pour paint) and captures each phase.
 // Usage: node tools/play.mjs <outdir> [--speed 6] [--chapters 9] [--coverage 0.6] [--lift]
 // Needs the dev server on 127.0.0.1:5317. Captures go to <outdir> (use a /tmp dir).
 import { chromium } from 'playwright';
@@ -37,24 +37,15 @@ for (let c = 0; c < chapters; c++) {
   await page.waitForFunction(() => window.__game.debug.phase === 'painting', null, { timeout: 60000 });
   await page.waitForTimeout(200);
   await shot(`${String(c + 1).padStart(2, '0')}b-sketch`);
-  // Paint horizontal sweeps over a random band until the coverage target is met.
-  const strokes = Math.round(coverage * 26);
-  for (let s = 0; s < strokes; s++) {
-    const v = rnd() * 0.9 + 0.05;
-    const u0 = rnd() * 0.4;
-    const u1 = u0 + 0.3 + rnd() * 0.5;
-    const [x0, y0] = at(u0, v);
-    await page.mouse.move(x0, y0);
+  // Pour: click or hold at random spots until the coverage target is met.
+  for (let s = 0; s < 24; s++) {
+    if ((await state()).coverage >= coverage || (await state()).phase !== 'painting') break;
+    const [x, y] = at(0.05 + rnd() * 0.9, 0.05 + rnd() * 0.9);
+    await page.mouse.move(x, y);
     await page.mouse.down();
-    const steps = 18;
-    for (let k = 1; k <= steps; k++) {
-      const u = u0 + ((u1 - u0) * k) / steps;
-      const [x, y] = at(u, v + Math.sin(k * 0.7) * 0.02);
-      await page.mouse.move(x, y);
-      await page.waitForTimeout(12);
-    }
+    await page.waitForTimeout((150 + rnd() * 900) / speed * 2);
     await page.mouse.up();
-    if ((await state()).phase !== 'painting') break;
+    await page.waitForTimeout(250);
   }
   await shot(`${String(c + 1).padStart(2, '0')}c-painted`);
   await page.waitForFunction(() => window.__game.debug.phase === 'drying', null, { timeout: 200000 });

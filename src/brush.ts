@@ -7,9 +7,20 @@ const GH = 100;
 /** Low-resolution copy of the paint mask, used to tell when a subject has been painted. */
 export class Coverage {
   readonly grid = new Float32Array(GW * GH);
+  private poured = new Float32Array(GW * GH);
 
   clear(): void {
     this.grid.fill(0);
+    this.poured.fill(0);
+  }
+
+  /** Takes the GPU's coarse map of poured paint (RGBA bytes, GW x GH, rows from the top). */
+  setPoured(bytes: Uint8Array): void {
+    for (let i = 0; i < GW * GH; i++) this.poured[i] = bytes[i * 4] / 255;
+  }
+
+  private at(i: number): number {
+    return Math.max(Math.min(1, this.grid[i] * 1.5), this.poured[i]);
   }
 
   add(d: Dab): void {
@@ -44,7 +55,7 @@ export class Coverage {
         const dx = (((gx + 0.5) / GW) * ASPECT - cx) / rx;
         const dy = ((gy + 0.5) / GH - cy) / ry;
         if (dx * dx + dy * dy > 1) continue;
-        sum += Math.min(1, this.grid[gy * GW + gx] * 1.5);
+        sum += this.at(gy * GW + gx);
         n++;
       }
     }
@@ -53,7 +64,7 @@ export class Coverage {
 
   total(): number {
     let sum = 0;
-    for (let i = 0; i < this.grid.length; i++) sum += Math.min(1, this.grid[i] * 1.5);
+    for (let i = 0; i < this.grid.length; i++) sum += this.at(i);
     return sum / this.grid.length;
   }
 
@@ -62,7 +73,7 @@ export class Coverage {
     let n = 0;
     for (let gy = Math.floor(y0 * GH); gy < Math.min(GH, Math.ceil(y1 * GH)); gy++) {
       for (let gx = 0; gx < GW; gx++) {
-        sum += Math.min(1, this.grid[gy * GW + gx] * 1.5);
+        sum += this.at(gy * GW + gx);
         n++;
       }
     }

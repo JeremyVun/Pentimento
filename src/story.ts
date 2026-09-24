@@ -185,10 +185,10 @@ export const CHAPTERS: Chapter[] = [
 export const UI = {
   begin: 'Begin',
   sound: 'Turn your sound on.',
-  keys: 'You can also paint with the arrow keys and Space.',
+  keys: 'You can also move with the arrow keys and pour with Space.',
   rotate: 'Turn your phone sideways for a bigger painting.',
-  hintMouse: 'Hold the mouse button to paint. The painting dries when the music ends.',
-  hintTouch: 'Touch and hold to paint. The painting dries when the music ends.',
+  hintMouse: 'Click to pour paint, or hold to pour more. The painting dries when the music ends.',
+  hintTouch: 'Tap to pour paint, or hold to pour more. The painting dries when the music ends.',
   finish: 'Finish painting',
   lift: 'Hold to lift the paint and see the years underneath.',
   save: 'Save image',

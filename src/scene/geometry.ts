@@ -43,6 +43,12 @@ export const BRIDGE = {
 };
 
 export const WALL_Y = 0.728;
+
+/** The shapes poured paint fills. Paint flows freely inside one region and stops at its edges. */
+export const REGION = {
+  sky: 1, hills: 2, fields: 3, town: 4, rightBank: 5, nearBank: 6, river: 7, bridge: 8,
+  garden: 9, fig: 10, willow: 11, window: 12, none: 0,
+} as const;
 export const FIG_BASE: Pt = [0.19, 0.958];
 export const WILLOW_BASE: Pt = [1.5, 0.93];
 

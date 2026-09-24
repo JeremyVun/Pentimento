@@ -294,6 +294,110 @@ void main() {
 }
 `;
 
+// Poured paint. R = paint left to spread (above zero means painted), G = wetness.
+// A pour seed only wets the region most of the brush is over, so clicks near an edge or on a
+// stray edge pixel still fill the shape the player meant.
+export const POUR_SEED_VS = `${HEADER}
+layout(location = 0) in vec4 aDab;
+layout(location = 1) in vec2 aExtra;
+uniform vec2 uRes;
+uniform sampler2D uRegion;
+out vec2 vLocal;
+out float vStrength;
+out float vSeed;
+flat out float vRegion;
+float rid(ivec2 p) { return floor(texelFetch(uRegion, p, 0).r * 255.0 / 16.0 + 0.5); }
+void main() {
+  int vi = gl_VertexID;
+  vec2 corner = vec2((vi == 1 || vi == 2 || vi == 4) ? 1.0 : -1.0, (vi == 2 || vi == 4 || vi == 5) ? 1.0 : -1.0);
+  vLocal = corner;
+  vStrength = aDab.w;
+  vSeed = aExtra.y;
+  ivec2 size = textureSize(uRegion, 0);
+  ivec2 c = ivec2(aDab.xy * vec2(size));
+  float ids[9];
+  for (int k = 0; k < 9; k++) {
+    ivec2 o = ivec2(k % 3 - 1, k / 3 - 1) * 3;
+    ids[k] = rid(clamp(c + o, ivec2(0), size - 1));
+  }
+  float best = ids[4];
+  int bestN = 0;
+  for (int a = 0; a < 9; a++) {
+    int n = 0;
+    for (int b = 0; b < 9; b++) n += ids[a] == ids[b] ? 1 : 0;
+    if (n > bestN) { bestN = n; best = ids[a]; }
+  }
+  vRegion = best;
+  vec2 size2 = vec2(1.35, 1.0) * aDab.z * uRes.y;
+  float ang = aExtra.x;
+  vec2 d = vec2(cos(ang), sin(ang));
+  vec2 offPx = mat2(d.x, d.y, -d.y, d.x) * (corner * size2);
+  gl_Position = vec4((aDab.xy + offPx / uRes) * 2.0 - 1.0, 0.0, 1.0);
+}
+`;
+
+export const POUR_SEED_FS = `${HEADER}${NOISE}
+in vec2 vLocal;
+in float vStrength;
+in float vSeed;
+flat in float vRegion;
+uniform sampler2D uRegion;
+out vec4 outColor;
+float rid(ivec2 p) { return floor(texelFetch(uRegion, p, 0).r * 255.0 / 16.0 + 0.5); }
+void main() {
+  if (rid(ivec2(gl_FragCoord.xy)) != vRegion) discard;
+  float r = length(vLocal);
+  float n = vnoise(vLocal * 2.5 + vSeed);
+  float shape = 1.0 - smoothstep(0.55, 1.0, r + (n - 0.5) * 0.4);
+  if (shape <= 0.0) discard;
+  outColor = vec4(vStrength * shape, 1.0, 0.0, 0.0);
+}
+`;
+
+export const POUR_SPREAD_FS = `${HEADER}${NOISE}
+in vec2 vUV;
+uniform sampler2D uPour;
+uniform sampler2D uRegion;
+uniform float uAspect;
+uniform float uSeed;
+uniform int uSet;
+out vec4 outColor;
+const ivec2 SET_A[8] = ivec2[8](ivec2(2, 0), ivec2(-2, 0), ivec2(0, 2), ivec2(0, -2), ivec2(1, 1), ivec2(1, -1), ivec2(-1, 1), ivec2(-1, -1));
+const ivec2 SET_B[8] = ivec2[8](ivec2(2, 1), ivec2(-2, -1), ivec2(1, -2), ivec2(-1, 2), ivec2(2, -1), ivec2(-2, 1), ivec2(1, 2), ivec2(-1, -2));
+float rid(ivec2 p) { return floor(texelFetch(uRegion, p, 0).r * 255.0 / 16.0 + 0.5); }
+void main() {
+  ivec2 size = textureSize(uPour, 0);
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec4 c = texelFetch(uPour, p, 0);
+  float me = rid(p);
+  vec2 q0 = vUV * vec2(uAspect, 1.0);
+  float rough = 0.7 + 1.1 * vnoise(q0 * 70.0 + uSeed) + 0.9 * vnoise(q0 * 9.0 - uSeed);
+  float unit = rough / float(size.y);
+  float best = c.r;
+  for (int i = 0; i < 8; i++) {
+    ivec2 o = uSet == 0 ? SET_A[i] : SET_B[i];
+    ivec2 q = clamp(p + o, ivec2(0), size - 1);
+    float nb = texelFetch(uPour, q, 0).r;
+    if (nb <= 0.0) continue;
+    float cand = nb - length(vec2(o)) * unit;
+    if (rid(q) != me) cand = min(cand, 0.004);
+    best = max(best, cand);
+  }
+  float wet = c.g;
+  if (c.r <= 0.0005 && best > 0.0005) wet = 1.0;
+  outColor = vec4(max(best, 0.0), wet, 0.0, 1.0);
+}
+`;
+
+export const POUR_DOWN_FS = `${HEADER}
+in vec2 vUV;
+uniform sampler2D uPour;
+out vec4 outColor;
+void main() {
+  outColor = vec4(smoothstep(0.0, 0.01, texture(uPour, vUV).r), 0.0, 0.0, 1.0);
+}
+`;
+
 // Final composite: dried layers, the living layer through the paint mask, pencil sketch, tape and paper.
 export const COMPOSITE_FS = `${HEADER}${NOISE}
 in vec2 vUV;
@@ -304,6 +408,7 @@ uniform sampler2D uSketch;
 uniform sampler2D uPaper;
 uniform highp sampler2DArray uSnaps;
 uniform sampler2D uLift;
+uniform sampler2D uPour;
 uniform float uLayers;
 uniform float uLiftMode;
 uniform float uSketchAmt;
@@ -334,6 +439,18 @@ float sketchEdge(vec2 uv) {
   vec3 gx = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
   vec3 gy = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
   return length(gx) + length(gy);
+}
+
+float pourCoverage(vec2 uv) {
+  vec2 t = 1.0 / vec2(textureSize(uPour, 0));
+  vec2 j = vec2(vnoise(uv * uRes * 0.07), vnoise(uv * uRes * 0.07 + 13.0)) - 0.5;
+  float s = 0.0;
+  s += smoothstep(0.0, 0.03, texture(uPour, uv + j * t * 1.5).r) * 2.0;
+  s += smoothstep(0.0, 0.03, texture(uPour, uv + vec2(1.2, 0.7) * t).r);
+  s += smoothstep(0.0, 0.03, texture(uPour, uv + vec2(-0.7, 1.2) * t).r);
+  s += smoothstep(0.0, 0.03, texture(uPour, uv + vec2(-1.2, -0.7) * t).r);
+  s += smoothstep(0.0, 0.03, texture(uPour, uv + vec2(0.7, -1.2) * t).r);
+  return s / 6.0;
 }
 
 vec3 wetLook(vec3 c, float wet, vec2 uv, float tooth) {
@@ -391,6 +508,9 @@ void main() {
   vec3 col = dry;
   if (uLiftMode < 0.5 && uLivingAmt > 0.0) {
     vec4 m = texture(uMask, uv);
+    vec4 pr = texture(uPour, uv);
+    m.r = max(m.r, pourCoverage(uv) * 1.1);
+    m.g = max(m.g, pr.g * smoothstep(0.0, 0.01, pr.r));
     float streak = vnoise(uv * vec2(uAspect, 1.0) * vec2(120.0, 9.0));
     float cov = m.r * uLivingAmt;
     float mEff = smoothstep(0.16, 0.6, cov + (tooth - 0.5) * 0.32 + (streak - 0.5) * 0.12);
@@ -429,8 +549,8 @@ void main() {
     float inner = smoothstep(tx - 0.0012, tx + 0.0002, dEdge + edgeN);
     float over = 0.0;
     if (uLivingAmt > 0.0) {
-      vec4 m = texture(uMask, uv);
-      over = smoothstep(0.2, 0.7, m.r) * 0.85;
+      float mr = max(texture(uMask, uv).r, pourCoverage(uv));
+      over = smoothstep(0.2, 0.7, mr) * 0.85;
     }
     vec3 painted = texture(uLiving, uv).rgb;
     vec3 tapeCol = mix(tape, painted * (0.9 + 0.1 * crepe), over);

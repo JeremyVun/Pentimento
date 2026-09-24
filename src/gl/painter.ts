@@ -1,6 +1,7 @@
 import { GL, Program, Target, bindTarget, clearTarget, createTarget } from './gl';
 import {
-  BASE_FS, COMPOSITE_FS, DAB_FS, DAB_VS, FULLSCREEN_VS, PAPER_FS, STROKE_FS, STROKE_VS,
+  BASE_FS, COMPOSITE_FS, DAB_FS, DAB_VS, FULLSCREEN_VS, PAPER_FS, POUR_DOWN_FS, POUR_SEED_FS, POUR_SEED_VS, POUR_SPREAD_FS,
+  STROKE_FS, STROKE_VS,
 } from './shaders';
 
 export const ASPECT = 1.6;
@@ -84,6 +85,17 @@ export class Painter {
   private dabBuf: WebGLBuffer;
   private dabData = new Float32Array(6 * 2048);
   private sceneMip = false;
+  private regionTex: WebGLTexture;
+  private pour: [Target, Target];
+  private pourIdx = 0;
+  private pourDown: Target;
+  private pSeed: Program;
+  private pSpread: Program;
+  private pDown: Program;
+  private spreadSet = 0;
+  readonly coverageW = 160;
+  readonly coverageH = 100;
+  private coverageBytes = new Uint8Array(160 * 100 * 4);
 
   constructor(readonly canvas: HTMLCanvasElement, width: number) {
     const gl = canvas.getContext('webgl2', {
@@ -105,6 +117,9 @@ export class Painter {
     this.pDab = new Program(gl, DAB_VS, DAB_FS);
     this.pComposite = new Program(gl, FULLSCREEN_VS, COMPOSITE_FS);
     this.pDecay = new Program(gl, FULLSCREEN_VS, DECAY_FS);
+    this.pSeed = new Program(gl, POUR_SEED_VS, POUR_SEED_FS);
+    this.pSpread = new Program(gl, FULLSCREEN_VS, POUR_SPREAD_FS);
+    this.pDown = new Program(gl, FULLSCREEN_VS, POUR_DOWN_FS);
     const pPaper = new Program(gl, FULLSCREEN_VS, PAPER_FS);
 
     this.emptyVao = gl.createVertexArray()!;
@@ -129,6 +144,14 @@ export class Painter {
     this.lift = createTarget(gl, w, h, true, half);
     this.dry = [createTarget(gl, w, h), createTarget(gl, w, h)];
     this.exportTarget = createTarget(gl, w, h);
+    const pw = Math.round(w / 2);
+    const ph = Math.round(h / 2);
+    this.pour = [createTarget(gl, pw, ph, true, half), createTarget(gl, pw, ph, true, half)];
+    this.pourDown = createTarget(gl, this.coverageW, this.coverageH);
+    this.regionTex = this.makeInputTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.regionTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
     this.sceneTex = this.makeInputTexture();
     this.flowTex = this.makeInputTexture();
@@ -190,6 +213,13 @@ export class Painter {
     this.upload(this.sketchTex, src);
   }
 
+  uploadRegions(src: TexImageSource): void {
+    this.upload(this.regionTex, src);
+    const gl = this.gl;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  }
+
   resetBoard(): void {
     const [r, g, b] = PAPER_RGB;
     clearTarget(this.gl, this.dry[0], r, g, b);
@@ -201,6 +231,8 @@ export class Painter {
 
   clearMask(): void {
     clearTarget(this.gl, this.mask, 0, 0, 0, 0);
+    clearTarget(this.gl, this.pour[0], 0, 0, 0, 0);
+    clearTarget(this.gl, this.pour[1], 0, 0, 0, 0);
   }
 
   clearLift(): void {
@@ -307,6 +339,63 @@ export class Painter {
 
   dryMask(dt: number, rate = 0.55): void {
     this.decay(this.mask, 1, Math.exp(-dt * rate));
+    this.decay(this.pour[this.pourIdx], 1, Math.exp(-dt * rate));
+  }
+
+  /** Drops paint at each dab; its strength is how far the paint will flow. */
+  pourSeed(dabs: Dab[]): void {
+    if (dabs.length === 0) return;
+    const gl = this.gl;
+    const n = Math.min(dabs.length, this.dabData.length / 6);
+    for (let i = 0; i < n; i++) {
+      const d = dabs[i];
+      this.dabData.set([d.x, d.y, d.r, d.strength, d.angle, d.seed], i * 6);
+    }
+    bindTarget(gl, this.pour[this.pourIdx]);
+    gl.bindVertexArray(this.dabVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.dabBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.dabData, 0, n * 6);
+    gl.enable(gl.BLEND);
+    gl.blendEquation(gl.MAX);
+    this.pSeed.use().f('uRes', this.pour[0].w, this.pour[0].h).tex('uRegion', 0, this.regionTex);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, n);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(this.emptyVao);
+  }
+
+  /** Lets poured paint flow on through its region. */
+  pourSpread(dt: number, seed: number): void {
+    const gl = this.gl;
+    const passes = Math.max(1, Math.min(5, Math.round(dt * 170)));
+    gl.bindVertexArray(this.emptyVao);
+    gl.disable(gl.BLEND);
+    for (let i = 0; i < passes; i++) {
+      const src = this.pour[this.pourIdx];
+      const dst = this.pour[1 - this.pourIdx];
+      bindTarget(gl, dst);
+      this.spreadSet = 1 - this.spreadSet;
+      this.pSpread.use()
+        .tex('uPour', 0, src.tex)
+        .tex('uRegion', 1, this.regionTex)
+        .i('uSet', this.spreadSet)
+        .f('uAspect', ASPECT)
+        .f('uSeed', seed);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      this.pourIdx = 1 - this.pourIdx;
+    }
+  }
+
+  /** Coarse painted/unpainted map of poured paint, one byte per cell, rows from the top. */
+  readPour(): Uint8Array {
+    const gl = this.gl;
+    bindTarget(gl, this.pourDown);
+    gl.bindVertexArray(this.emptyVao);
+    gl.disable(gl.BLEND);
+    this.pDown.use().tex('uPour', 0, this.pour[this.pourIdx].tex);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.readPixels(0, 0, this.coverageW, this.coverageH, gl.RGBA, gl.UNSIGNED_BYTE, this.coverageBytes);
+    return this.coverageBytes;
   }
 
   settleLift(dt: number): void {
@@ -327,6 +416,7 @@ export class Painter {
       .tex('uPaper', 4, this.paper.tex)
       .tex('uSnaps', 5, this.snaps, gl.TEXTURE_2D_ARRAY)
       .tex('uLift', 6, this.lift.tex)
+      .tex('uPour', 7, this.pour[this.pourIdx].tex)
       .f('uLayers', c.layers)
       .f('uLiftMode', c.liftMode ? 1 : 0)
       .f('uSketchAmt', c.sketch)

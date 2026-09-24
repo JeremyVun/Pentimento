@@ -1,5 +1,5 @@
 import { SceneConfig, Palette } from './config';
-import { A, BRIDGE, FIG_BASE, WALL_Y, WILLOW_BASE, gardenRight, riverBanks, riverSpan } from './geometry';
+import { A, BRIDGE, FIG_BASE, REGION, WALL_Y, WILLOW_BASE, gardenRight, riverBanks, riverSpan } from './geometry';
 import {
   Pt, circle, clamp, css, ellipse, hash, hex, lerp, mixHex, mixRGB, mulberry, poly, shade, smooth, withAlpha, xAtY,
 } from './util';
@@ -11,6 +11,8 @@ export interface Frame {
   sketch: boolean;
   /** Seconds since each subject woke, or undefined if it hasn't. */
   woke: Record<string, number | undefined>;
+  /** Set only when drawing the region map: called with the region each element belongs to. */
+  region?: (id: number) => void;
 }
 
 export function drawScene(ctx: CanvasRenderingContext2D, H: number, f: Frame): void {
@@ -20,27 +22,43 @@ export function drawScene(ctx: CanvasRenderingContext2D, H: number, f: Frame): v
   ctx.lineJoin = 'round';
   const c = f.cfg;
 
+  const R = f.region ?? (() => {});
+  R(REGION.sky);
   sky(ctx, f);
   clouds(ctx, f);
+  R(REGION.hills);
   hills(ctx, c.pal, c);
+  R(REGION.fields);
   farBank(ctx, c.pal, c);
+  R(REGION.rightBank);
   rightLand(ctx, f);
+  R(REGION.town);
   town(ctx, f);
+  R(REGION.nearBank);
   nearBank(ctx, f);
+  R(REGION.river);
   river(ctx, f);
   if (c.mist && !f.sketch) mist(ctx, f, 0.5, 0.64);
+  R(REGION.bridge);
   bridge(ctx, f);
+  R(REGION.river);
   ferry(ctx, f);
   drawRiverFigures(ctx, f);
+  R(REGION.none);
   reeds(ctx, f);
+  R(REGION.willow);
   willow(ctx, f);
+  R(REGION.garden);
   garden(ctx, f);
+  R(REGION.fig);
   fig(ctx, f);
+  R(REGION.garden);
   drawGardenFigures(ctx, f);
   if (c.clouds.kind === 'cumulus' && !f.sketch) cloudShadows(ctx, f);
   if (c.mist && !f.sketch) mist(ctx, f, 0.68, 0.74);
   drawBirds(ctx, f);
   drawWeather(ctx, f);
+  R(REGION.window);
   if (c.window) drawWindow(ctx, f);
   ctx.restore();
 }
@@ -436,7 +454,7 @@ interface House {
 }
 
 let HOUSES: House[] | null = null;
-function houses(): House[] {
+export function houses(): House[] {
   if (HOUSES) return HOUSES;
   const r = mulberry(1234);
   const list: House[] = [];
@@ -1271,9 +1289,9 @@ function beans(ctx: CanvasRenderingContext2D, f: Frame): void {
   }
 }
 
-interface Limb { x0: number; y0: number; cx: number; cy: number; x1: number; y1: number; w: number }
+export interface Limb { x0: number; y0: number; cx: number; cy: number; x1: number; y1: number; w: number }
 
-function figSkeleton(s: number): { limbs: Limb[]; tips: Pt[] } {
+export function figSkeleton(s: number): { limbs: Limb[]; tips: Pt[] } {
   const r = mulberry(42);
   const [bx, by] = FIG_BASE;
   const trunkH = 0.04 + 0.16 * s;
@@ -1335,6 +1353,29 @@ export function figLeaf(ctx: CanvasRenderingContext2D, x: number, y: number, s: 
   ctx.fillStyle = col;
   ctx.fill();
   ctx.restore();
+}
+
+export interface Cluster { x: number; y: number; r: number; i: number }
+
+export function figClusters(F: SceneConfig['fig'], tips: Pt[]): { clusters: Cluster[]; rc: number; density: number } {
+  const s = F.size;
+  const density = F.leaves === 'autumn' ? 0.6 : F.leaves === 'spring' ? 0.8 : 1;
+  const rc = (0.025 + 0.06 * s) * (F.leaves === 'spring' ? 0.8 : 1);
+  const r = mulberry(77);
+  const clusters: Cluster[] = [];
+  tips.forEach((tp, i) => {
+    if (F.broken && i < 3) return;
+    const k = Math.round(3 * density) + 1;
+    for (let j = 0; j < k; j++) {
+      clusters.push({
+        x: tp[0] + (r() - 0.5) * rc * 1.6,
+        y: tp[1] + (r() - 0.5) * rc * 1.1 + rc * 0.2,
+        r: rc * (0.55 + 0.5 * r()),
+        i: i * 7 + j,
+      });
+    }
+  });
+  return { clusters, rc, density };
 }
 
 function fig(ctx: CanvasRenderingContext2D, f: Frame): void {
@@ -1399,22 +1440,7 @@ function fig(ctx: CanvasRenderingContext2D, f: Frame): void {
     return;
   }
 
-  const density = F.leaves === 'autumn' ? 0.6 : F.leaves === 'spring' ? 0.8 : 1;
-  const rc = (0.025 + 0.06 * s) * (F.leaves === 'spring' ? 0.8 : 1);
-  const r = mulberry(77);
-  const clusters: { x: number; y: number; r: number; i: number }[] = [];
-  tips.forEach((tp, i) => {
-    if (F.broken && i < 3) return;
-    const k = Math.round(3 * density) + 1;
-    for (let j = 0; j < k; j++) {
-      clusters.push({
-        x: tp[0] + (r() - 0.5) * rc * 1.6,
-        y: tp[1] + (r() - 0.5) * rc * 1.1 + rc * 0.2,
-        r: rc * (0.55 + 0.5 * r()),
-        i: i * 7 + j,
-      });
-    }
-  });
+  const { clusters, rc, density } = figClusters(F, tips);
   const cols = [P.leafDark, P.leafMid, P.leafLight];
 
   for (const cl of clusters) {

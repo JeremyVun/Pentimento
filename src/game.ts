@@ -5,6 +5,7 @@ import { Narration } from './narration';
 import { SCENES, type SceneConfig } from './scene/config';
 import { drawScene } from './scene/draw';
 import { drawFlow } from './scene/flow';
+import { drawRegions } from './scene/regions';
 import { CHAPTERS, UI, type Chapter } from './story';
 import type { View } from './view-dom';
 
@@ -30,6 +31,9 @@ export class Game {
   private sceneCtx: CanvasRenderingContext2D;
   private flowCanvas: HTMLCanvasElement;
   private sketchCanvas: HTMLCanvasElement;
+  private regionCanvas: HTMLCanvasElement;
+  private pourHeld = 0;
+  private readT = 0;
   private coverage = new Coverage();
   private liftGrid = new Coverage();
   private wash = 0;
@@ -63,6 +67,9 @@ export class Game {
     this.sketchCanvas.width = painter.w;
     this.sketchCanvas.height = painter.h;
 
+    this.regionCanvas = document.createElement('canvas');
+    this.regionCanvas.width = Math.round(painter.w / 2);
+    this.regionCanvas.height = Math.round(painter.h / 2);
     brush.radius = BRUSH_RADIUS;
     brush.onFirstPaint = () => this.audio.unlock();
     narration.onVisible = (on) => this.audio.duck(on);
@@ -147,6 +154,9 @@ export class Game {
     const sctx = this.sketchCanvas.getContext('2d')!;
     drawScene(sctx, this.sketchCanvas.height, { cfg, t: 0, sketch: true, woke: {} });
     this.painter.uploadSketch(this.sketchCanvas);
+    const rctx = this.regionCanvas.getContext('2d')!;
+    drawRegions(rctx, this.regionCanvas.height, cfg);
+    this.painter.uploadRegions(this.regionCanvas);
   }
 
   private startChapter(i: number): void {
@@ -219,7 +229,7 @@ export class Game {
       case 'painting': {
         const ch = this.chapter!;
         this.sceneT += dt;
-        this.applyPaint(dabs);
+        this.applyPour(dabs, dt);
         this.painter.dryMask(dt, 0.5);
         ch.lines.forEach((l, i) => {
           if (!this.shownLines.has(i) && this.phaseT >= l.at) {
@@ -227,6 +237,11 @@ export class Game {
             this.narration.push(l.text, ch.voice);
           }
         });
+        this.readT -= dt;
+        if (this.readT <= 0) {
+          this.readT = 0.2;
+          this.coverage.setPoured(this.painter.readPour());
+        }
         this.checkT -= dt;
         if (this.checkT <= 0) {
           this.checkT = 0.2;
@@ -241,7 +256,7 @@ export class Game {
           }
         }
         if (this.brush.down) this.paintedSeconds += dt;
-        if (this.paintedSeconds > 2.5) this.view.hideHint();
+        if (this.paintedSeconds > 2.5 || this.coverage.total() > 0.06) this.view.hideHint();
         const canFinish = this.phaseT > 25 && this.shownLines.size === ch.lines.length;
         this.view.showFinish(canFinish);
         if (this.phaseT >= this.cfg.duration || this.finishRequested) this.enterDrying();
@@ -250,6 +265,7 @@ export class Game {
 
       case 'drying': {
         const t = this.phaseT;
+        if (!this.baked) this.painter.pourSpread(dt, this.chapterIndex * 7.3);
         this.painter.dryMask(dt, 3);
         this.sketch = 1 - ramp(t, 0, 1.2);
         if (!this.baked && t >= 1.3) {
@@ -275,9 +291,12 @@ export class Game {
     }
 
     const onBoard = this.brush.x >= 0 && this.brush.x <= 1 && this.brush.y >= 0 && this.brush.y <= 1;
+    const cursorR = this.phase === 'painting'
+      ? 0.018 + (this.brush.down ? this.pourBudget * 0.09 : 0)
+      : this.brush.radius * this.brush.scale;
     this.view.setCursor(
       (this.phase === 'painting' || this.phase === 'lift') && this.brush.inside && onBoard,
-      this.brush.x, this.brush.y, this.brush.radius * this.brush.scale, this.brush.down,
+      this.brush.x, this.brush.y, cursorR, this.brush.down,
     );
   }
 
@@ -314,14 +333,25 @@ export class Game {
 
   private wasDown = false;
 
-  private applyPaint(dabs: Dab[]): void {
-    if (dabs.length) {
-      this.painter.paint(dabs);
-      for (const d of dabs) this.coverage.add(d);
+  /** How far paint poured now will flow; holding the button pours more. */
+  private get pourBudget(): number {
+    return Math.min(0.85, 0.11 + this.pourHeld * 0.24) * (this.chapter?.brush ?? 1);
+  }
+
+  private applyPour(dabs: Dab[], dt: number): void {
+    if (this.brush.down) {
+      this.pourHeld += dt;
+      const budget = this.pourBudget;
+      const seeds = dabs.filter((_, i) => i % 3 === 0).map((d) => ({ ...d, r: 0.016, strength: budget }));
+      if (seeds.length === 0) seeds.push({ x: this.brush.x, y: this.brush.y, r: 0.016, strength: budget, angle: 0, seed: 1 });
+      this.painter.pourSeed(seeds);
+      this.audio.brush(this.brush.x, this.brush.y, Math.max(this.brush.speed, 0.5));
+    } else {
+      this.pourHeld = 0;
+      if (this.wasDown) this.audio.brushUp();
     }
-    if (this.brush.down) this.audio.brush(this.brush.x, this.brush.y, this.brush.speed);
-    else if (this.wasDown) this.audio.brushUp();
     this.wasDown = this.brush.down;
+    this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3);
   }
 
   private applyLift(dabs: Dab[], dt: number): void {
