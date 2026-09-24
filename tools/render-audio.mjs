@@ -86,7 +86,7 @@ const server = await createServer({
   configFile: path.join(root, 'vite.config.ts'),
   cacheDir: path.join(outDir, '.vite-cache'),
   logLevel: 'warn',
-  server: { host: '127.0.0.1', port: PORT, strictPort: true },
+  server: { host: '127.0.0.1', port: PORT, strictPort: true, hmr: false, watch: null },
 });
 await server.listen();
 

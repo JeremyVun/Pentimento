@@ -1,10 +1,10 @@
 import { Brush, type BrushTarget } from './brush';
-import type { Composition } from './compose';
 import { engineStats } from './debug';
 import { ScorePlayer } from './player';
 import { compose, SCORES, SCORE_IDS } from './scores';
 import { Synth } from './synth';
-import { hasTone, toneBuffer, type ToneId } from './tones';
+import { LOOP_IDS } from './tones';
+import { compositionAssets, Warmer } from './warm';
 
 export type ScoreId =
   | 'title' | 'nine' | 'sixteen' | 'twentythree' | 'thirtyone'
@@ -27,40 +27,6 @@ const LOOKAHEAD = 0.13;
 const TICK_MS = 25;
 const CROSSFADE = 3;
 
-type Idle = (cb: (deadline: { timeRemaining(): number }) => void) => number;
-
-/** Builds the per-note buffers a score needs in idle time, so scheduling rarely stalls on them. */
-function warm(comp: Composition, extra: [ToneId, number][] = []): void {
-  const todo = new Map<string, [ToneId, number]>();
-  for (const ev of comp.events) {
-    if (ev.kind === 'note' && ev.inst !== 'bass' && !hasTone(ev.inst, ev.midi)) todo.set(`${ev.inst}:${ev.midi}`, [ev.inst, ev.midi]);
-  }
-  for (const [inst, midi] of extra) if (!hasTone(inst, midi)) todo.set(`${inst}:${midi}`, [inst, midi]);
-  const first = new Map<string, number>();
-  for (const ev of comp.events) {
-    if (ev.kind === 'note' && !first.has(`${ev.inst}:${ev.midi}`)) first.set(`${ev.inst}:${ev.midi}`, ev.t);
-  }
-  const queue = [...todo.entries()].sort((a, b) => (first.get(a[0]) ?? 1e9) - (first.get(b[0]) ?? 1e9)).map((e) => e[1]);
-  const idle: Idle =
-    (globalThis as { requestIdleCallback?: Idle }).requestIdleCallback?.bind(globalThis) ??
-    ((cb) => window.setTimeout(() => cb({ timeRemaining: () => 8 }), 16));
-  const step = (deadline: { timeRemaining(): number }) => {
-    while (queue.length && deadline.timeRemaining() > 4) {
-      const [inst, midi] = queue.shift()!;
-      toneBuffer(inst, midi);
-    }
-    if (queue.length) idle(step);
-  };
-  idle(step);
-}
-
-function brushRange(id: ScoreId): [ToneId, number][] {
-  const b = SCORES[id].brush;
-  const out: [ToneId, number][] = [];
-  for (let m = b.lo; m <= b.hi + 17; m++) out.push([b.inst, m]);
-  return out;
-}
-
 export function createAudioEngine(): AudioEngine {
   let ctx: AudioContext | null = null;
   let synth: Synth | null = null;
@@ -74,6 +40,7 @@ export function createAudioEngine(): AudioEngine {
   let ducked = false;
   let layer: ScoreId | null = null;
   let brushDown = false;
+  let warmer: Warmer | null = null;
 
   function tick(): void {
     if (!ctx || ctx.state !== 'running') return;
@@ -115,7 +82,7 @@ export function createAudioEngine(): AudioEngine {
     currentId = id;
     current.mode = liftMode();
     synth.setMix(comp.mix, now, old ? CROSSFADE : 0.05);
-    warm(comp, id === 'lift' ? SCORE_IDS.flatMap(brushRange) : brushRange(id));
+    warmer?.request(compositionAssets(comp), true);
     tick();
   }
 
@@ -141,6 +108,9 @@ export function createAudioEngine(): AudioEngine {
         if (ducked) synth.duck(true, ctx.currentTime);
         document.addEventListener('visibilitychange', onVisibility);
         setInterval(tick, TICK_MS);
+        warmer = new Warmer();
+        warmer.request(LOOP_IDS.map((id) => ({ kind: 'loop', id, n: 0 })));
+        for (const sid of SCORE_IDS) warmer.request(compositionAssets(compose(sid)));
       }
       if (ctx.state !== 'running' && !document.hidden) await ctx.resume();
       if (pending) {

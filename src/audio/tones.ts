@@ -4,44 +4,82 @@ export type ToneId = 'piano' | 'musicbox' | 'celesta' | 'marimba' | 'kalimba' | 
 export type AmbToneId = 'bird' | 'swallow' | 'robin' | 'hammer' | 'thunder';
 export type LoopId = 'waterA' | 'waterB' | 'rainA' | 'rainB' | 'pink' | 'brown';
 
+/** Something the synth plays from a generated buffer: a pitched tone, an ambience call or a noise loop. */
+export type Asset =
+  | { kind: 'tone'; id: ToneId; n: number }
+  | { kind: 'amb'; id: AmbToneId; n: number }
+  | { kind: 'loop'; id: LoopId; n: number };
+
+/** Generated samples, channel after channel. Plain data so a worker can make it. */
+export interface Raw {
+  data: Float32Array<ArrayBuffer>;
+  sampleRate: number;
+  channels: number;
+}
+
+export const AMB_VARIANTS: Record<AmbToneId, number> = { bird: 16, swallow: 8, robin: 8, hammer: 4, thunder: 4 };
+export const LOOP_IDS: LoopId[] = ['waterA', 'waterB', 'rainA', 'rainB', 'pink', 'brown'];
+
 const TAU = Math.PI * 2;
 const cache = new Map<string, AudioBuffer>();
 
-function toBuffer(data: Float32Array<ArrayBuffer>, sampleRate: number, channels = 1): AudioBuffer {
-  const length = data.length / channels;
-  const b = new AudioBuffer({ length, sampleRate, numberOfChannels: channels });
-  if (channels === 1) b.copyToChannel(data, 0);
-  else for (let c = 0; c < channels; c++) b.copyToChannel(data.slice(c * length, (c + 1) * length), c);
-  return b;
+function normalise(a: Asset): Asset {
+  if (a.kind === 'tone') return { ...a, n: clamp(Math.round(a.n), 21, 108) };
+  if (a.kind === 'amb') return { ...a, n: ((a.n % AMB_VARIANTS[a.id]) + AMB_VARIANTS[a.id]) % AMB_VARIANTS[a.id] };
+  return { ...a, n: 0 };
 }
 
-function cached(key: string, make: () => AudioBuffer): AudioBuffer {
+export function assetKey(a: Asset): string {
+  const b = normalise(a);
+  return `${b.kind}:${b.id}:${b.n}`;
+}
+
+/** Pure sample generation; safe to run in a worker. */
+export function renderAsset(a: Asset): Raw {
+  const b = normalise(a);
+  if (b.kind === 'tone') return GENERATORS[b.id](b.n);
+  if (b.kind === 'amb') return AMB_GENERATORS[b.id](b.n);
+  return LOOPS[b.id]();
+}
+
+export function isReady(a: Asset): boolean {
+  return cache.has(assetKey(a));
+}
+
+/** Stores samples made elsewhere (the worker) as a playable buffer. */
+export function adopt(a: Asset, r: Raw): void {
+  const key = assetKey(a);
+  if (cache.has(key)) return;
+  const length = r.data.length / r.channels;
+  const buf = new AudioBuffer({ length, sampleRate: r.sampleRate, numberOfChannels: r.channels });
+  for (let c = 0; c < r.channels; c++) buf.copyToChannel(r.data.subarray(c * length, (c + 1) * length), c);
+  cache.set(key, buf);
+}
+
+function get(a: Asset): AudioBuffer {
+  const key = assetKey(a);
   let b = cache.get(key);
   if (!b) {
-    b = make();
-    cache.set(key, b);
+    adopt(a, renderAsset(a));
+    b = cache.get(key)!;
   }
   return b;
 }
 
-export function hasTone(id: ToneId, midi: number): boolean {
-  return cache.has(`${id}:${midi}`);
-}
-
 export function toneBuffer(id: ToneId, midi: number): AudioBuffer {
-  const m = clamp(Math.round(midi), 21, 108);
-  return cached(`${id}:${m}`, () => GENERATORS[id](m));
+  return get({ kind: 'tone', id, n: midi });
 }
 
 export function ambBuffer(id: AmbToneId, variant: number): AudioBuffer {
-  const v = variant % AMB_VARIANTS[id];
-  return cached(`${id}#${v}`, () => AMB_GENERATORS[id](v));
+  return get({ kind: 'amb', id, n: variant });
 }
 
-export const AMB_VARIANTS: Record<AmbToneId, number> = { bird: 16, swallow: 8, robin: 8, hammer: 4, thunder: 4 };
-
 export function loopBuffer(id: LoopId): AudioBuffer {
-  return cached(`loop:${id}`, () => LOOPS[id]());
+  return get({ kind: 'loop', id, n: 0 });
+}
+
+function raw(data: Float32Array<ArrayBuffer>, sampleRate: number, channels = 1): Raw {
+  return { data, sampleRate, channels };
 }
 
 interface Partial {
@@ -117,7 +155,7 @@ function fadeTail(out: Float32Array, sr: number, sec = 0.05): void {
 
 const PIANO_SR = 22050;
 
-function piano(midi: number): AudioBuffer {
+function piano(midi: number): Raw {
   const sr = PIANO_SR;
   const f0 = hz(midi);
   const r = rng(midi * 7919 + 13);
@@ -146,7 +184,7 @@ function piano(midi: number): AudioBuffer {
   attack(out, sr, 0.0025 + 0.004 * clamp((72 - midi) / 36, 0, 1));
   normaliseRms(out, sr, 0.16 * (1 + clamp((60 - midi) / 48, -0.25, 0.3)));
   fadeTail(out, sr, 0.3);
-  return toBuffer(out, sr);
+  return raw(out, sr);
 }
 
 function struck(
@@ -156,17 +194,17 @@ function struck(
   parts: Partial[],
   atk: number,
   click: { amp: number; tau: number; cutoff: number; hp?: boolean } | null,
-): AudioBuffer {
+): Raw {
   const out = new Float32Array(Math.round(sr * seconds));
   addPartials(out, sr, parts);
   if (click) burst(out, sr, midi * 17 + 3, click.amp, click.tau, click.cutoff, click.hp);
   attack(out, sr, atk);
   normaliseRms(out, sr, 0.16, 0.15);
   fadeTail(out, sr, 0.1);
-  return toBuffer(out, sr);
+  return raw(out, sr);
 }
 
-function musicbox(midi: number): AudioBuffer {
+function musicbox(midi: number): Raw {
   const f = hz(midi);
   const tau = clamp(2.2 * Math.pow(2, -(midi - 72) / 20), 0.7, 3.6);
   return struck(
@@ -185,7 +223,7 @@ function musicbox(midi: number): AudioBuffer {
   );
 }
 
-function celesta(midi: number): AudioBuffer {
+function celesta(midi: number): Raw {
   const f = hz(midi);
   const tau = clamp(1.7 * Math.pow(2, -(midi - 72) / 22), 0.6, 3);
   return struck(
@@ -203,7 +241,7 @@ function celesta(midi: number): AudioBuffer {
   );
 }
 
-function marimba(midi: number): AudioBuffer {
+function marimba(midi: number): Raw {
   const f = hz(midi);
   const tau = clamp(0.75 * Math.pow(2, -(midi - 60) / 20), 0.22, 1.4);
   return struck(
@@ -220,7 +258,7 @@ function marimba(midi: number): AudioBuffer {
   );
 }
 
-function kalimba(midi: number): AudioBuffer {
+function kalimba(midi: number): Raw {
   const f = hz(midi);
   const tau = clamp(1.3 * Math.pow(2, -(midi - 67) / 24), 0.5, 2.2);
   return struck(
@@ -238,7 +276,7 @@ function kalimba(midi: number): AudioBuffer {
   );
 }
 
-function glass(midi: number): AudioBuffer {
+function glass(midi: number): Raw {
   const f = hz(midi);
   const tau = clamp(3.2 * Math.pow(2, -(midi - 72) / 24), 1.2, 5);
   return struck(
@@ -258,7 +296,7 @@ function glass(midi: number): AudioBuffer {
 }
 
 /** Karplus-Strong string with a fractional-delay allpass for accurate tuning. */
-function karplus(midi: number, bright: number, t60: number, seconds: number): AudioBuffer {
+function karplus(midi: number, bright: number, t60: number, seconds: number): Raw {
   const sr = 32000;
   const f0 = hz(midi);
   const period = sr / f0;
@@ -296,20 +334,20 @@ function karplus(midi: number, bright: number, t60: number, seconds: number): Au
   attack(out, sr, 0.0015);
   normaliseRms(out, sr, 0.16, 0.2);
   fadeTail(out, sr, 0.2);
-  return toBuffer(out, sr);
+  return raw(out, sr);
 }
 
-function pluck(midi: number): AudioBuffer {
+function pluck(midi: number): Raw {
   const t60 = clamp(3.2 * Math.pow(2, -(midi - 60) / 18), 0.8, 5);
   return karplus(midi, 0.25, t60, Math.min(3.5, t60 * 1.1));
 }
 
-function harp(midi: number): AudioBuffer {
+function harp(midi: number): Raw {
   const t60 = clamp(5 * Math.pow(2, -(midi - 60) / 20), 1.5, 7);
   return karplus(midi, 0.5, t60, Math.min(5, t60 * 1.1));
 }
 
-function bell(midi: number): AudioBuffer {
+function bell(midi: number): Raw {
   const sr = 22050;
   const f = hz(midi);
   const r = rng(midi * 53 + 1);
@@ -328,10 +366,10 @@ function bell(midi: number): AudioBuffer {
   attack(out, sr, 0.0015);
   normaliseRms(out, sr, 0.16, 0.5);
   fadeTail(out, sr, 0.5);
-  return toBuffer(out, sr);
+  return raw(out, sr);
 }
 
-const GENERATORS: Record<ToneId, (midi: number) => AudioBuffer> = {
+const GENERATORS: Record<ToneId, (midi: number) => Raw> = {
   piano,
   musicbox,
   celesta,
@@ -354,7 +392,7 @@ interface Chirp {
   h2?: number;
 }
 
-function chirps(notes: Chirp[], seed: number): AudioBuffer {
+function chirps(notes: Chirp[], seed: number): Raw {
   const sr = 32000;
   const end = notes.reduce((m, n) => Math.max(m, n.t + n.d), 0) + 0.05;
   const out = new Float32Array(Math.round(end * sr));
@@ -373,10 +411,10 @@ function chirps(notes: Chirp[], seed: number): AudioBuffer {
     }
   }
   normaliseRms(out, sr, 0.12, end);
-  return toBuffer(out, sr);
+  return raw(out, sr);
 }
 
-function bird(v: number): AudioBuffer {
+function bird(v: number): Raw {
   const r = rng(v * 977 + 5);
   const notes: Chirp[] = [];
   const species = v % 4;
@@ -419,7 +457,7 @@ function bird(v: number): AudioBuffer {
   return chirps(notes, v);
 }
 
-function robin(v: number): AudioBuffer {
+function robin(v: number): Raw {
   const r = rng(v * 431 + 9);
   const notes: Chirp[] = [];
   let t = 0;
@@ -448,7 +486,7 @@ function robin(v: number): AudioBuffer {
   return chirps(notes, v + 100);
 }
 
-function swallow(v: number): AudioBuffer {
+function swallow(v: number): Raw {
   const r = rng(v * 613 + 2);
   const notes: Chirp[] = [];
   let t = 0;
@@ -469,7 +507,7 @@ function swallow(v: number): AudioBuffer {
   return chirps(notes, v + 200);
 }
 
-function hammer(v: number): AudioBuffer {
+function hammer(v: number): Raw {
   const sr = 22050;
   const r = rng(v * 71 + 4);
   const out = new Float32Array(Math.round(sr * 0.4));
@@ -483,10 +521,10 @@ function hammer(v: number): AudioBuffer {
   attack(out, sr, 0.0003);
   normaliseRms(out, sr, 0.16, 0.08);
   fadeTail(out, sr, 0.05);
-  return toBuffer(out, sr);
+  return raw(out, sr);
 }
 
-function thunder(v: number): AudioBuffer {
+function thunder(v: number): Raw {
   const sr = 11025;
   const r = rng(v * 991 + 17);
   const len = Math.round(sr * 7);
@@ -517,10 +555,10 @@ function thunder(v: number): AudioBuffer {
   }
   normaliseRms(out, sr, 0.16, 7);
   fadeTail(out, sr, 0.5);
-  return toBuffer(out, sr);
+  return raw(out, sr);
 }
 
-const AMB_GENERATORS: Record<AmbToneId, (v: number) => AudioBuffer> = { bird, swallow, robin, hammer, thunder };
+const AMB_GENERATORS: Record<AmbToneId, (v: number) => Raw> = { bird, swallow, robin, hammer, thunder };
 
 const LOOP_SR = 22050;
 
@@ -579,7 +617,7 @@ function stereo(left: Float32Array, right: Float32Array): Float32Array<ArrayBuff
   return out;
 }
 
-function water(seconds: number, seed: number): AudioBuffer {
+function water(seconds: number, seed: number): Raw {
   const sr = LOOP_SR;
   const len = Math.round(seconds * sr);
   const chan = (s: number) => {
@@ -609,10 +647,10 @@ function water(seconds: number, seed: number): AudioBuffer {
   const rr = chan(seed + 50);
   normaliseRms(l, sr, 0.1, seconds);
   normaliseRms(rr, sr, 0.1, seconds);
-  return toBuffer(stereo(l, rr), sr, 2);
+  return raw(stereo(l, rr), sr, 2);
 }
 
-function rain(seconds: number, seed: number): AudioBuffer {
+function rain(seconds: number, seed: number): Raw {
   const sr = LOOP_SR;
   const len = Math.round(seconds * sr);
   const chan = (s: number) => {
@@ -650,10 +688,10 @@ function rain(seconds: number, seed: number): AudioBuffer {
   const rr = chan(seed + 13);
   normaliseRms(l, sr, 0.1, seconds);
   normaliseRms(rr, sr, 0.1, seconds);
-  return toBuffer(stereo(l, rr), sr, 2);
+  return raw(stereo(l, rr), sr, 2);
 }
 
-function noiseLoop(kind: 'pink' | 'brown', seconds: number, seed: number): AudioBuffer {
+function noiseLoop(kind: 'pink' | 'brown', seconds: number, seed: number): Raw {
   const sr = LOOP_SR;
   const len = Math.round(seconds * sr);
   const gen = kind === 'pink' ? pinkNoise : brownNoise;
@@ -661,10 +699,10 @@ function noiseLoop(kind: 'pink' | 'brown', seconds: number, seed: number): Audio
   const rr = seamless(len, 4000, gen(seed + 1));
   normaliseRms(l, sr, 0.1, seconds);
   normaliseRms(rr, sr, 0.1, seconds);
-  return toBuffer(stereo(l, rr), sr, 2);
+  return raw(stereo(l, rr), sr, 2);
 }
 
-const LOOPS: Record<LoopId, () => AudioBuffer> = {
+const LOOPS: Record<LoopId, () => Raw> = {
   waterA: () => water(5.3, 11),
   waterB: () => water(7.7, 23),
   rainA: () => rain(4.1, 31),
