@@ -1,7 +1,7 @@
 import { SceneConfig, Palette } from './config';
 import { A, BRIDGE, FIG_BASE, WALL_Y, WILLOW_BASE, gardenRight, riverBanks, riverSpan } from './geometry';
 import {
-  Pt, circle, clamp, ellipse, hash, lerp, mixHex, mulberry, poly, shade, smooth, withAlpha, xAtY,
+  Pt, circle, clamp, css, ellipse, hash, hex, lerp, mixHex, mixRGB, mulberry, poly, shade, smooth, withAlpha, xAtY,
 } from './util';
 import { drawBirds, drawBridgeFigures, drawGardenFigures, drawRiverFigures, drawWeather, drawWindow } from './actors';
 
@@ -123,10 +123,12 @@ function clouds(ctx: CanvasRenderingContext2D, f: Frame): void {
     const s = cl.scale * (0.05 + 0.075 * depth);
     const x = ((((i + 0.2 + 0.6 * hash(i * 3.1 + 2)) / cl.n) * span + f.t * cl.speed * (0.5 + depth)) % span) - 0.45;
     const y = lerp(cl.y0, cl.y1, hash(i * 7.7 + 1));
-    const lit = mixHex(P.cloudLit, P.sky1, 0.25 * (1 - depth));
-    const shd = mixHex(P.cloudShade, P.sky1, 0.3 * (1 - depth));
+    const litRGB = mixRGB(hex(P.cloudLit), hex(P.sky1), 0.25 * (1 - depth));
+    const shdRGB = mixRGB(hex(P.cloudShade), hex(P.sky1), 0.3 * (1 - depth));
+    const lit = css(litRGB);
+    const shd = css(shdRGB);
     if (cl.kind === 'streaky') streaky(ctx, x, y, s, lit, shd, i);
-    else if (cl.kind === 'storm') stormCloud(ctx, x, y, s * 1.6, lit, shd, i);
+    else if (cl.kind === 'storm') stormCloud(ctx, x, y, s * 1.6, css(mixRGB(litRGB, shdRGB, 0.45)), shd, i);
     else cumulus(ctx, x, y, s * (cl.kind === 'rain' ? 1.25 : 1), lit, shd, i, cl.kind);
   }
 }
@@ -165,7 +167,7 @@ function cumulus(
 }
 
 function stormCloud(
-  ctx: CanvasRenderingContext2D, x: number, y: number, s: number, lit: string, shd: string, seed: number,
+  ctx: CanvasRenderingContext2D, x: number, y: number, s: number, mid: string, shd: string, seed: number,
 ): void {
   const r = mulberry(seed * 71 + 5);
   for (let j = 0; j < 7; j++) {
@@ -174,7 +176,7 @@ function stormCloud(
     const rx = s * (1.2 + r() * 1.5);
     const ry = s * (0.3 + r() * 0.35);
     ellipse(ctx, x + ox, y + oy + ry * 0.3, rx, ry, (r() - 0.5) * 0.1, shd);
-    ellipse(ctx, x + ox - rx * 0.1, y + oy - ry * 0.25, rx * 0.8, ry * 0.55, (r() - 0.5) * 0.1, mixHex(lit, shd, 0.45));
+    ellipse(ctx, x + ox - rx * 0.1, y + oy - ry * 0.25, rx * 0.8, ry * 0.55, (r() - 0.5) * 0.1, mid);
   }
 }
 
@@ -342,17 +344,43 @@ function willow(ctx: CanvasRenderingContext2D, f: Frame): void {
   const light = bare ? P.trunk : autumn ? '#eccb6c' : mixHex(P.leafLight, P.treeLit, 0.4);
   const r = mulberry(61);
   if (bare) {
+    const tips: Pt[] = [];
     ctx.strokeStyle = P.trunk;
-    ctx.lineWidth = 0.0016;
+    for (let i = 0; i < 9; i++) {
+      const a = -Math.PI / 2 + (i / 8 - 0.5) * 2.4 + (r() - 0.5) * 0.2;
+      const sx = bx - 0.012 + (r() - 0.5) * 0.02;
+      const sy = by - 0.19 - r() * 0.03;
+      const L = 0.06 + r() * 0.05;
+      const ex = sx + Math.cos(a) * L * 1.3;
+      const ey = sy + Math.sin(a) * L;
+      ctx.lineWidth = 0.005;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.quadraticCurveTo((sx + ex) / 2, sy + Math.sin(a) * L * 0.7, ex, ey);
+      ctx.stroke();
+      tips.push([ex, ey]);
+    }
+    ctx.lineWidth = 0.0014;
     ctx.beginPath();
-    for (let i = 0; i < 40; i++) {
-      const x0 = bx - 0.1 + r() * 0.2;
-      const y0 = by - 0.28 + r() * 0.06;
+    for (let i = 0; i < 60; i++) {
+      const t0 = tips[i % tips.length];
+      const x0 = t0[0] + (r() - 0.5) * 0.03;
+      const y0 = t0[1] + r() * 0.02;
+      const len = 0.06 + r() * 0.12;
       ctx.moveTo(x0, y0);
-      ctx.quadraticCurveTo(x0 + (r() - 0.5) * 0.04, y0 + 0.05, x0 + (r() - 0.5) * 0.03 + sway(i, 1), y0 + 0.08 + r() * 0.1);
+      ctx.quadraticCurveTo(x0 + (x0 - bx) * 0.3, y0 + len * 0.3, x0 + (x0 - bx) * 0.25 + sway(i, 1), y0 + len);
     }
     ctx.stroke();
-    if (c.snow) ellipse(ctx, bx - 0.01, by - 0.27, 0.1, 0.012, 0, '#f5f7fb');
+    if (c.snow) {
+      ctx.strokeStyle = '#f5f7fb';
+      ctx.lineWidth = 0.003;
+      ctx.beginPath();
+      for (const [tx, ty] of tips) {
+        ctx.moveTo(tx - 0.012, ty + 0.004);
+        ctx.lineTo(tx + 0.004, ty - 0.002);
+      }
+      ctx.stroke();
+    }
     return;
   }
   const blobs: [number, number, number][] = [];
@@ -852,11 +880,33 @@ function bridgeWorks(ctx: CanvasRenderingContext2D, f: Frame): void {
   const P = f.cfg.pal;
   const B = BRIDGE;
   const piers = [(B.spans[0][1] + B.spans[1][0]) / 2, (B.spans[1][1] + B.spans[2][0]) / 2];
-  ctx.fillStyle = P.stone;
-  ctx.fillRect(B.x0, B.top + 0.015, 0.1, B.water - B.top - 0.01);
-  ctx.fillRect(B.x1 - 0.12, B.top + 0.025, 0.12, B.water - B.top - 0.02);
-  ctx.fillStyle = withAlpha(P.stoneShade, 0.6);
-  ctx.fillRect(B.x0 + 0.09, B.top + 0.015, 0.012, B.water - B.top - 0.01);
+  const abut = (x0: number, x1: number, top: number, stepRight: boolean) => {
+    const pts: Pt[] = [[x0, B.water + 0.004], [x0, top]];
+    const steps = 4;
+    for (let k = 0; k < steps; k++) {
+      const u0 = k / steps;
+      const u1 = (k + 1) / steps;
+      const xa = stepRight ? lerp(x0, x1, u0) : lerp(x1, x0, u0);
+      const xb = stepRight ? lerp(x0, x1, u1) : lerp(x1, x0, u1);
+      const y = top + k * 0.008;
+      if (stepRight) pts.push([xa, y], [xb, y]);
+      else pts.splice(1, 0, [xb, y], [xa, y]);
+    }
+    pts.push([x1, B.water + 0.004]);
+    poly(ctx, stepRight ? pts : [[x0, B.water + 0.004], ...pts.slice(1)]);
+    ctx.fillStyle = mixHex(P.stone, P.stoneShade, 0.35);
+    ctx.fill();
+    ctx.strokeStyle = withAlpha(P.stoneShade, 0.7);
+    ctx.lineWidth = 0.0015;
+    ctx.beginPath();
+    for (let y = top + 0.012; y < B.water; y += 0.012) {
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x1, y);
+    }
+    ctx.stroke();
+  };
+  abut(B.x0, B.x0 + 0.105, B.top + 0.012, true);
+  abut(B.x1 - 0.12, B.x1, B.top + 0.02, false);
   for (const px of piers) {
     ctx.fillStyle = P.stone;
     ctx.fillRect(px - 0.017, 0.578, 0.034, B.water - 0.574);

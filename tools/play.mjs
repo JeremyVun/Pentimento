@@ -63,11 +63,16 @@ for (let c = 0; c < chapters; c++) {
 }
 if (lift) {
   await page.waitForFunction(() => window.__game.debug.phase === 'lift', null, { timeout: 120000 });
+  await page.evaluate(() => { window.__speed = 1; });
   await page.waitForTimeout(1500);
   await shot('90-final');
-  const [x, y] = at(0.5, 0.5);
+  const [x, y] = at(0.3, 0.3);
   await page.mouse.move(x, y);
   await page.mouse.down();
+  await page.waitForTimeout(1600);
+  await shot('90b-hold');
+  await page.waitForTimeout(1600);
+  await shot('90c-hold-longer');
   for (let k = 0; k < 90; k++) {
     const [px, py] = at(0.35 + 0.3 * Math.sin(k * 0.13), 0.5 + 0.12 * Math.sin(k * 0.21));
     await page.mouse.move(px, py);

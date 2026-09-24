@@ -143,6 +143,7 @@ button {
   box-sizing: border-box;
 }
 .hint.on { opacity: 1; }
+.hint.centred { align-items: center; padding-bottom: 2.6em; font-size: clamp(16px, calc(var(--board-h) * 0.03), 24px); color: var(--light); }
 
 .controls, .end {
   position: absolute;

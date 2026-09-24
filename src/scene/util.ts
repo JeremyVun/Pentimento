@@ -1,6 +1,11 @@
 export type RGB = [number, number, number];
 
+/** Parses '#rrggbb' or 'rgb(r,g,b)'. */
 export function hex(h: string): RGB {
+  if (h.charCodeAt(0) !== 35) {
+    const m = h.match(/-?[\d.]+/g);
+    return m ? [Number(m[0]), Number(m[1]), Number(m[2])] : [0, 0, 0];
+  }
   const n = parseInt(h.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }

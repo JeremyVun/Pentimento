@@ -37,7 +37,7 @@ export const CHAPTERS: Chapter[] = [
     ],
     subjects: [
       { id: 'ferry', x: 0.79, y: 0.675, rx: 0.27, ry: 0.035, line: 'The ferryman was called Mr Aldous. He let children ride for free if they bailed out the water.' },
-      { id: 'fig', x: 0.25, y: 0.93, rx: 0.1, ry: 0.07, line: 'My father planted the fig tree that spring. It was a stick with two leaves, and he watered it every evening.' },
+      { id: 'fig', x: 0.17, y: 0.92, rx: 0.1, ry: 0.07, line: 'My father planted the fig tree that spring. It was a stick with two leaves, and he watered it every evening.' },
       { id: 'swallows', x: 0.95, y: 0.22, rx: 0.45, ry: 0.13, line: 'Swallows nested under our roof. I tried to paint them, but they always came out as smudges.' },
     ],
     close: 'I only had the one board. So the next year, I painted over it.',
@@ -88,7 +88,7 @@ export const CHAPTERS: Chapter[] = [
     subjects: [
       { id: 'washing', x: 0.26, y: 0.83, rx: 0.22, ry: 0.06, line: 'Joe hung the washing out every morning before work. He always pegged the socks in pairs.' },
       { id: 'fig', x: 0.2, y: 0.68, rx: 0.2, ry: 0.14, line: 'The fig tree finally fruited that summer. My father ate the first fig standing under the tree.' },
-      { id: 'kids', x: 0.8, y: 0.62, rx: 0.14, ry: 0.08, line: "Children swam off the bridge, which wasn't allowed. I'd done it too, once." },
+      { id: 'kids', x: 0.92, y: 0.6, rx: 0.12, ry: 0.07, line: "Children swam off the bridge, which wasn't allowed. I'd done it too, once." },
     ],
     close: "She woke up before I'd finished the sky.",
     closeLow: "She woke up before I'd painted much at all.",
@@ -175,7 +175,7 @@ export const CHAPTERS: Chapter[] = [
     subjects: [
       { id: 'fig', x: 0.2, y: 0.62, rx: 0.25, ry: 0.2, line: "The fig tree is enormous now. I still haven't seen a fig flower." },
       { id: 'swallows', x: 0.95, y: 0.22, rx: 0.45, ry: 0.13, line: 'Swallows still nest under the roof. Gran could never paint them, and neither can I.' },
-      { id: 'kids', x: 0.8, y: 0.6, rx: 0.12, ry: 0.07, line: "Children still jump off the bridge. It still isn't allowed." },
+      { id: 'kids', x: 0.92, y: 0.6, rx: 0.12, ry: 0.07, line: "Children still jump off the bridge. It still isn't allowed." },
     ],
     close: "I'll paint it again next summer.",
     closeLow: "I haven't painted much yet. I'll do more next summer.",

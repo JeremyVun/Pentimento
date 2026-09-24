@@ -116,8 +116,9 @@ export class View {
     this.card.classList.remove('on');
   }
 
-  showHint(text: string): void {
+  showHint(text: string, centred = false): void {
     this.hint.textContent = text;
+    this.hint.classList.toggle('centred', centred);
     this.hint.classList.add('on');
   }
 

@@ -90,8 +90,8 @@ function person(ctx: CanvasRenderingContext2D, x: number, y: number, h: number, 
   const wave = p.wave ?? 0;
   if (wave > 0) {
     const a = Math.sin(wave) * h * 0.06;
-    arm(1, x + sw * 1.45, armY - h * 0.08, x + sw * 1.55 + a, armY - h * 0.27);
-    if (p.bothArms) arm(-1, x - sw * 1.45, armY - h * 0.08, x - sw * 1.55 - a, armY - h * 0.27);
+    arm(1, x + sw * 2.0, armY - h * 0.1, x + sw * 2.3 + a, armY - h * 0.36);
+    if (p.bothArms) arm(-1, x - sw * 2.0, armY - h * 0.1, x - sw * 2.3 - a, armY - h * 0.36);
     else hang(-1);
   } else if (p.armUp !== undefined) {
     arm(1, x + sw * 1.3, armY + h * 0.02, x + sw * 1.55, armY - h * 0.18 * p.armUp + h * 0.12 * (1 - p.armUp));
@@ -167,7 +167,7 @@ const JOE: PersonStyle = { coat: '#f0bf2e', legs: '#3b3f52', hair: '#3a2c26', sk
 
 export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void {
   const c = f.cfg;
-  const y = BRIDGE.deck + 0.004;
+  const y = BRIDGE.top + 0.002;
   if (c.figures.includes('joeBridge')) {
     const w = f.woke.joe;
     const stopFor = 7;
@@ -175,7 +175,7 @@ export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void
     const x = lerp(0.37, 1.1, clamp(walkT / (c.duration * 0.95)));
     const waving = w !== undefined && w < stopFor;
     const umbrellaUp = c.weather === 'rain' && f.t < c.duration * 0.55;
-    person(ctx, x, y, 0.044, JOE, {
+    person(ctx, x, y, 0.054, JOE, {
       walk: waving ? undefined : walkT * 6,
       wave: waving ? w * 8 : 0,
       umbrella: umbrellaUp ? '#2c2b31' : undefined,
@@ -245,7 +245,7 @@ export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void
   }
   if (c.figures.includes('kidsBridge')) {
     const wk = f.woke.kids;
-    const kids: [number, string][] = [[0.73, '#e2574c'], [0.765, '#4a8fd0'], [0.8, '#f2c94c']];
+    const kids: [number, string][] = [[0.875, '#e2574c'], [0.91, '#4a8fd0'], [0.945, '#f2c94c']];
     kids.forEach(([x, col], i) => {
       if (i === 1 && wk !== undefined) {
         if (wk < 1.4) {
@@ -309,12 +309,12 @@ export function drawRiverFigures(ctx: CanvasRenderingContext2D, f: Frame): void 
       ctx.strokeStyle = withAlpha(P.riverLight, 0.9 * (1 - u));
       ctx.lineWidth = 0.003;
       ctx.beginPath();
-      ctx.ellipse(0.795, 0.64, 0.01 + u * 0.05, 0.004 + u * 0.015, 0, 0, Math.PI * 2);
+      ctx.ellipse(0.94, 0.64, 0.01 + u * 0.05, 0.004 + u * 0.015, 0, 0, Math.PI * 2);
       ctx.stroke();
       if (u < 0.3) {
         for (let k = 0; k < 7; k++) {
           const a = -Math.PI * (0.15 + 0.7 * (k / 6));
-          circle(ctx, 0.795 + Math.cos(a) * u * 0.1, 0.64 + Math.sin(a) * u * 0.12, 0.003, P.riverLight);
+          circle(ctx, 0.94 + Math.cos(a) * u * 0.1, 0.64 + Math.sin(a) * u * 0.12, 0.003, P.riverLight);
         }
       }
     }
@@ -347,27 +347,36 @@ export function drawGardenFigures(ctx: CanvasRenderingContext2D, f: Frame): void
   const [fx, fy] = FIG_BASE;
   if (c.figures.includes('father')) {
     const wk = f.woke.fig;
-    const standing = wk !== undefined && wk < 7;
+    const waving = wk !== undefined && wk < 7;
     const style: PersonStyle = { coat: '#eee8da', legs: '#4a5a7a', hair: '#5a4a3e', skin: '#e0ae8e' };
-    if (standing) {
-      person(ctx, fx + 0.07, fy + 0.012, 0.11, style, { wave: wk * 7 });
+    const px = fx - 0.07;
+    const py = fy + 0.012;
+    const h = 0.11;
+    if (waving) {
+      person(ctx, px, py, h, style, { wave: wk * 7 });
     } else {
-      person(ctx, fx + 0.075, fy + 0.012, 0.11, style, { kneel: true, armUp: 0.9 });
-      const cx = fx + 0.03;
-      const cy = fy - 0.03;
-      poly(ctx, [[cx - 0.012, cy - 0.01], [cx + 0.012, cy - 0.01], [cx + 0.014, cy + 0.012], [cx - 0.014, cy + 0.012]]);
+      person(ctx, px, py, h, style, { armUp: 0.25 });
+      const hx = px + h * 0.105 * 1.55;
+      const hy = py - h * 0.8 + h * 0.035 - h * 0.18 * 0.25 + h * 0.12 * 0.75;
+      ctx.save();
+      ctx.translate(hx + 0.008, hy + 0.006);
+      ctx.rotate(0.5);
+      poly(ctx, [[-0.01, -0.009], [0.012, -0.009], [0.014, 0.011], [-0.012, 0.011]]);
       ctx.fillStyle = '#6d8a7d';
       ctx.fill();
       ctx.strokeStyle = '#6d8a7d';
-      ctx.lineWidth = 0.004;
+      ctx.lineWidth = 0.0035;
       ctx.beginPath();
-      ctx.moveTo(cx - 0.012, cy - 0.004);
-      ctx.lineTo(cx - 0.03, cy - 0.016);
+      ctx.moveTo(0.012, -0.002);
+      ctx.lineTo(0.032, -0.014);
       ctx.stroke();
+      ctx.restore();
       if (!f.sketch) {
-        for (let k = 0; k < 6; k++) {
-          const ph = (f.t * 1.5 + k / 6) % 1;
-          circle(ctx, cx - 0.03 - ph * 0.008, cy - 0.014 + ph * 0.05, 0.0018, withAlpha('#cfe6f2', 0.9));
+        const sx = hx + 0.036;
+        const sy = hy - 0.002;
+        for (let k = 0; k < 7; k++) {
+          const ph = (f.t * 1.4 + k / 7) % 1;
+          circle(ctx, sx + ph * 0.012, sy + ph * ph * 0.05, 0.0018, withAlpha('#d4ecf6', 0.9));
         }
       }
     }

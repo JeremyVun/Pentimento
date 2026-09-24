@@ -196,7 +196,8 @@ void main() {
   vec2 bd = vec2(cos(baseAng), sin(baseAng));
   vec2 ed = vec2(cos(edgeAng), sin(edgeAng));
   if (dot(bd, ed) < 0.0) ed = -ed;
-  vec2 dir = normalize(mix(bd, ed, edgeW) + 1e-4);
+  float force = hint > 0.004 ? smoothstep(0.25, 0.4, length(drift)) : 0.0;
+  vec2 dir = normalize(mix(mix(bd, ed, edgeW), bd, force) + 1e-4);
   ang = atan(dir.y, dir.x) + (h1.z - 0.5) * 0.5;
 
   vec2 size = uSize * (0.7 + 0.6 * h1.w);

@@ -76,6 +76,15 @@ export class Game {
     return { phase: this.phase, chapter: this.chapter?.id ?? null, t: this.phaseT, coverage: this.coverage.total() };
   }
 
+  /** QA only: jump straight to the lift ending with whatever is on the board. */
+  qaLift(): void {
+    for (let i = 0; i < CHAPTERS.length; i++) this.painter.bake(i);
+    this.chapterIndex = CHAPTERS.length - 1;
+    this.chapter = CHAPTERS[this.chapterIndex];
+    this.view.showTitle(false);
+    this.enterLift();
+  }
+
   private enterTitle(): void {
     this.phase = 'title';
     this.phaseT = 0;
@@ -291,9 +300,9 @@ export class Game {
     this.painter.clearLift();
     this.liftGrid.clear();
     this.brush.enabled = true;
-    this.brush.scale = 1.2;
+    this.brush.scale = 1.8;
     this.audio.play('lift');
-    this.view.showHint(UI.lift);
+    this.view.showHint(UI.lift, true);
     this.view.showEnd(true);
   }
 
@@ -311,7 +320,7 @@ export class Game {
   }
 
   private applyLift(dabs: Dab[], dt: number): void {
-    const lifted = dabs.map((d) => ({ ...d, strength: 0.0045 }));
+    const lifted = dabs.map((d) => ({ ...d, strength: d.strength < 0.1 ? 0.004 : 0.011 }));
     if (lifted.length) {
       this.painter.liftPaint(lifted);
       for (const d of lifted) this.liftGrid.add({ ...d, strength: d.strength / 1.6 });
@@ -321,7 +330,7 @@ export class Game {
     const g = this.liftGrid.grid;
     for (let i = 0; i < g.length; i++) g[i] *= k;
 
-    const depth = this.liftGrid.ellipse(this.brush.x * ASPECT, this.brush.y, 0.012, 0.012) / 1.5;
+    const depth = this.liftGrid.ellipse(this.brush.x * ASPECT, this.brush.y, 0.015, 0.015) / 1.5;
     const top = CHAPTERS.length - 1;
     const idx = Math.round(top - Math.min(1, depth) * top);
     const layer = CHAPTERS[Math.max(0, Math.min(top, idx))];

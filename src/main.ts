@@ -37,7 +37,7 @@ function start(): void {
   let last = performance.now();
   let frames = 0;
   const loop = (now: number) => {
-    const dt = Math.min(0.1, (now - last) / 1000) * speed;
+    const dt = Math.min(0.1, (now - last) / 1000) * ((window as unknown as { __speed?: number }).__speed ?? speed);
     last = now;
     game.update(dt);
     game.render(now / 1000);
