@@ -100,11 +100,6 @@ export function createTarget(gl: GL, w: number, h: number, linear = true, half =
   return { tex, fbo, w, h };
 }
 
-export function deleteTarget(gl: GL, t: Target): void {
-  gl.deleteFramebuffer(t.fbo);
-  gl.deleteTexture(t.tex);
-}
-
 export function bindTarget(gl: GL, t: Target | null, w?: number, h?: number): void {
   gl.bindFramebuffer(gl.FRAMEBUFFER, t ? t.fbo : null);
   gl.viewport(0, 0, t ? t.w : w!, t ? t.h : h!);

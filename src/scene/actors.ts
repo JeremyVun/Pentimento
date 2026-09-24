@@ -523,7 +523,6 @@ export function drawWeather(ctx: CanvasRenderingContext2D, f: Frame): void {
   const c = f.cfg;
   const w = c.weather;
   if (!w || f.sketch) return;
-  const P = c.pal;
   if (w === 'rain' || w === 'storm') {
     const storm = w === 'storm';
     const intensity = storm ? 1 : 1 - smooth(0.35, 0.65, f.t / Math.max(1, c.duration));
@@ -580,7 +579,6 @@ export function drawWeather(ctx: CanvasRenderingContext2D, f: Frame): void {
       ellipse(ctx, x, y, 0.004, 0.002 + Math.abs(Math.sin(rot)) * 0.002, rot, withAlpha(i % 3 ? '#f6cad6' : '#fbe6ec', 0.9));
     }
   }
-  void P;
 }
 
 export function drawWindow(ctx: CanvasRenderingContext2D, f: Frame): void {

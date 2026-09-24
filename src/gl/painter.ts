@@ -34,6 +34,8 @@ export interface CompositeParams {
   dryFade: number;
   liftMode: boolean;
   layers: number;
+  pulse?: [number, number, number, number];
+  pulseAmt?: number;
 }
 
 export interface Dab {
@@ -337,7 +339,9 @@ export class Painter {
       .f('uLivingAmt', c.living)
       .f('uRes', this.w, this.h)
       .f('uPaperCol', ...PAPER_RGB)
-      .f('uDryFade', c.dryFade);
+      .f('uDryFade', c.dryFade)
+      .f('uPulse', ...(c.pulse ?? [0, 0, 1, 1]))
+      .f('uPulseAmt', c.pulseAmt ?? 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

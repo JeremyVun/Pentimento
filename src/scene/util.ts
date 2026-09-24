@@ -65,32 +65,6 @@ export function poly(ctx: CanvasRenderingContext2D, pts: Pt[], close = true): vo
   if (close) ctx.closePath();
 }
 
-/** A closed shape through the points, rounded with quadratic curves through midpoints. */
-export function smoothPoly(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
-  const n = pts.length;
-  ctx.beginPath();
-  const m0: Pt = [(pts[n - 1][0] + pts[0][0]) / 2, (pts[n - 1][1] + pts[0][1]) / 2];
-  ctx.moveTo(m0[0], m0[1]);
-  for (let i = 0; i < n; i++) {
-    const p = pts[i];
-    const q = pts[(i + 1) % n];
-    ctx.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
-  }
-  ctx.closePath();
-}
-
-/** An open curve through the points, smoothed the same way. */
-export function smoothLine(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length - 1; i++) {
-    const p = pts[i];
-    const q = pts[i + 1];
-    ctx.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
-  }
-  const last = pts[pts.length - 1];
-  ctx.lineTo(last[0], last[1]);
-}
-
 export function circle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string): void {
   ctx.beginPath();
   ctx.arc(x, y, Math.max(0, r), 0, Math.PI * 2);

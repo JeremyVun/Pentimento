@@ -317,6 +317,8 @@ uniform float uLivingAmt;
 uniform vec2 uRes;
 uniform vec3 uPaperCol;
 uniform float uDryFade;
+uniform vec4 uPulse;
+uniform float uPulseAmt;
 out vec4 outColor;
 
 float sketchEdge(vec2 uv) {
@@ -400,6 +402,13 @@ void main() {
   }
 
   if (uBake > 0.5) { outColor = vec4(col, 1.0); return; }
+
+  if (uPulseAmt > 0.001) {
+    vec2 pd = (uv * vec2(uAspect, 1.0) - uPulse.xy) / uPulse.zw;
+    float pr = dot(pd, pd);
+    float glow = exp(-pr * 1.6) * uPulseAmt;
+    col = mix(col, col * vec3(1.1, 1.06, 0.96) + vec3(0.05, 0.04, 0.02), glow * 0.55);
+  }
 
   if (uWash > 0.001) {
     float wn = fbm(uv * vec2(uAspect, 1.0) * 3.0 + uTime * 0.05);

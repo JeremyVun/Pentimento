@@ -41,6 +41,7 @@ export class Game {
   private paintedSeconds = 0;
   private hintShown = false;
   private checkT = 0;
+  private pulse: { x: number; y: number; rx: number; ry: number; t: number } | null = null;
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private sceneScale = 0.62;
 
@@ -169,6 +170,10 @@ export class Game {
 
   update(dt: number): void {
     this.phaseT += dt;
+    if (this.pulse) {
+      this.pulse.t += dt;
+      if (this.pulse.t > 3.5) this.pulse = null;
+    }
     this.narration.update(dt);
     const dabs = this.brush.update(dt);
 
@@ -214,7 +219,7 @@ export class Game {
       case 'painting': {
         const ch = this.chapter!;
         this.sceneT += dt;
-        this.applyPaint(dabs, dt);
+        this.applyPaint(dabs);
         this.painter.dryMask(dt, 0.5);
         ch.lines.forEach((l, i) => {
           if (!this.shownLines.has(i) && this.phaseT >= l.at) {
@@ -229,6 +234,7 @@ export class Game {
             if (this.wakeTimes[s.id] !== undefined) continue;
             if (this.coverage.ellipse(s.x, s.y, s.rx, s.ry) >= WAKE_AT) {
               this.wakeTimes[s.id] = this.sceneT;
+              this.pulse = { x: s.x, y: s.y, rx: s.rx * 1.3, ry: s.ry * 1.6, t: 0 };
               this.narration.push(s.line, ch.voice);
               this.audio.wake(s.x / ASPECT);
             }
@@ -308,7 +314,7 @@ export class Game {
 
   private wasDown = false;
 
-  private applyPaint(dabs: Dab[], dt: number): void {
+  private applyPaint(dabs: Dab[]): void {
     if (dabs.length) {
       this.painter.paint(dabs);
       for (const d of dabs) this.coverage.add(d);
@@ -316,7 +322,6 @@ export class Game {
     if (this.brush.down) this.audio.brush(this.brush.x, this.brush.y, this.brush.speed);
     else if (this.wasDown) this.audio.brushUp();
     this.wasDown = this.brush.down;
-    void dt;
   }
 
   private applyLift(dabs: Dab[], dt: number): void {
@@ -352,6 +357,8 @@ export class Game {
       dryFade: 0,
       liftMode: this.phase === 'lift',
       layers: CHAPTERS.length,
+      pulse: this.pulse ? [this.pulse.x, this.pulse.y, this.pulse.rx, this.pulse.ry] as [number, number, number, number] : undefined,
+      pulseAmt: this.pulse ? Math.sin(Math.min(1, this.pulse.t / 3.5) * Math.PI) ** 1.5 : 0,
     };
   }
 
