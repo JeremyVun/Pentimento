@@ -185,6 +185,8 @@ export const CHAPTERS: Chapter[] = [
 export const UI = {
   begin: 'Begin',
   sound: 'Turn your sound on.',
+  keys: 'You can also paint with the arrow keys and Space.',
+  rotate: 'Turn your phone sideways for a bigger painting.',
   hintMouse: 'Hold the mouse button to paint. The painting dries when the music ends.',
   hintTouch: 'Touch and hold to paint. The painting dries when the music ends.',
   finish: 'Finish painting',
@@ -193,5 +195,6 @@ export const UI = {
   again: 'Start again',
   mute: 'Mute',
   unmute: 'Unmute',
+  contextLost: 'The graphics card was reset. Reload the page to carry on.',
   noWebgl: "This game needs WebGL 2, which your browser doesn't support. Try a recent version of Chrome, Firefox or Safari.",
 };

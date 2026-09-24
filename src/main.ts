@@ -26,6 +26,10 @@ function start(): void {
     view.fatal(UI.noWebgl);
     return;
   }
+  view.board.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    view.fatal(UI.contextLost);
+  });
   const audio = createAudioEngine();
   view.onMute = (m) => audio.setMuted(m);
   const brush = new Brush(view.board);
@@ -38,9 +42,9 @@ function start(): void {
   let frames = 0;
   const loop = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000) * ((window as unknown as { __speed?: number }).__speed ?? speed);
-    last = now;
     game.update(dt);
-    game.render(now / 1000);
+    game.render(now / 1000, (now - last) / 1000);
+    last = now;
     frames++;
     (window as unknown as { __frames: number }).__frames = frames;
     requestAnimationFrame(loop);

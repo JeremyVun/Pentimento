@@ -14,6 +14,7 @@ export class View {
   readonly board: HTMLCanvasElement;
   readonly narrationRoot: HTMLElement;
   private title: HTMLElement;
+  private notes: HTMLElement;
   private card: HTMLElement;
   private hint: HTMLElement;
   private cursor: HTMLElement;
@@ -39,7 +40,10 @@ export class View {
     el('p', 'definition', plate, DEFINITION);
     const begin = el('button', 'begin', plate, UI.begin);
     begin.addEventListener('click', () => this.onBegin?.());
-    el('p', 'small', plate, UI.sound);
+    this.notes = el('div', 'notes', root);
+    el('p', '', this.notes, UI.sound);
+    el('p', 'keys', this.notes, UI.keys);
+    el('p', 'rotate', this.notes, UI.rotate);
 
     this.card = el('div', 'card', root);
     this.cursor = el('div', 'cursor', root);
@@ -99,12 +103,15 @@ export class View {
     }
     const top = y + h;
     Object.assign(this.narrationRoot.style, { left: `${x}px`, width: `${w}px`, top: `${top}px`, height: `${vh - top}px` });
-    Object.assign(this.hint.style, { left: `${x}px`, width: `${w}px`, top: `${top}px`, height: `${vh - top}px` });
+    for (const e of [this.hint, this.notes]) {
+      Object.assign(e.style, { left: `${x}px`, width: `${w}px`, top: `${top}px`, height: `${vh - top}px` });
+    }
     document.documentElement.style.setProperty('--board-h', `${h}px`);
   }
 
   showTitle(on: boolean): void {
     this.title.classList.toggle('on', on);
+    this.notes.classList.toggle('on', on);
   }
 
   showCard(text: string, voice: string): void {

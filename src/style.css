@@ -65,15 +65,32 @@ body > .board:only-child {
   letter-spacing: 0.01em;
 }
 .title .definition {
-  margin: 0.4em 0 1.4em;
-  font-size: calc(var(--board-h) * 0.03);
+  margin: 0.4em 0 1.3em;
+  font-size: max(12px, calc(var(--board-h) * 0.03));
   color: #4a4038;
   max-width: 30em;
 }
-.title .small {
-  margin: 1.2em 0 0;
-  font-size: calc(var(--board-h) * 0.022);
-  color: #6a5e52;
+.notes {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  font-size: clamp(14px, calc(var(--board-h) * 0.026), 19px);
+  color: var(--dim);
+  text-align: center;
+}
+.notes.on { opacity: 1; }
+.notes p { margin: 0.15em 1em; }
+.notes .rotate { display: none; }
+@media (pointer: coarse) {
+  .notes .keys { display: none; }
+}
+@media (pointer: coarse) and (orientation: portrait) {
+  .notes .rotate { display: block; }
 }
 button {
   font-family: var(--serif);

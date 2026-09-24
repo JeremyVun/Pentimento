@@ -355,7 +355,21 @@ export class Game {
     };
   }
 
-  render(time: number): void {
+  private quality = 1;
+  private slowFrames = 0;
+
+  /** Thins the brush strokes if frames keep running long. */
+  private adapt(frameSec: number): void {
+    if (frameSec > 0.024 && frameSec < 0.25) this.slowFrames++;
+    else this.slowFrames = Math.max(0, this.slowFrames - 1);
+    if (this.slowFrames > 90 && this.quality > 0.45) {
+      this.quality *= 0.8;
+      this.slowFrames = 0;
+    }
+  }
+
+  render(time: number, frameSec = 1 / 60): void {
+    this.adapt(frameSec);
     const needsLiving = this.living > 0 && (this.phase === 'title' || this.phase === 'opening'
       || this.phase === 'painting' || (this.phase === 'drying' && !this.baked) || (this.phase === 'intro' && this.phaseT > INTRO - 1.5));
     if (needsLiving) {
@@ -370,7 +384,7 @@ export class Game {
         blur: this.cfg.blur ?? 0,
         strokeScale: this.cfg.blur ? 1.7 : 1,
         angle: 0,
-        layers: DEFAULT_LAYERS,
+        layers: this.quality < 1 ? DEFAULT_LAYERS.map((l) => ({ ...l, count: l.count * this.quality })) : DEFAULT_LAYERS,
       });
     }
     this.painter.present(this.compositeParams(time));
