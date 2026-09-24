@@ -125,7 +125,7 @@ export const twentythree: ScoreDef = {
     w.note('bass', 41, 0, 2, 8, 0.42);
     hold(w, 'pad', 'F', 0, 2, 9, { lo: 57, hi: 74, count: 4, vel: 0.4, release: 4 });
   },
-  bed: { water: { level: 0.34, cutoff: 2600 }, rain: { level: 0.32, ease: { at: RAIN_EASES, to: 0.12, over: 12 } } },
+  bed: { water: { level: 0.34, cutoff: 2600 }, rain: { level: 0.3, ease: { at: RAIN_EASES, to: 0.12, over: 12 } } },
   mix: { music: 1, amb: 0.95, dryVerb: 0.2, wetVerb: 0.45 },
   brush: { inst: 'piano', lo: 69, hi: 93, vel: 0.42, bus: 'dry', dur: 0.9, bright: 1.2 },
 };

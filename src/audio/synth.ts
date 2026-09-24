@@ -36,7 +36,7 @@ const TONES: Record<Exclude<InstId, 'bass'>, TonePatch> = {
   glass: { level: 0.5, cutoff: 7000, attack: 0.02, release: 0.8, damped: false, bus: 'wet', detune: 3 },
   pluck: { level: 0.7, cutoff: 4200, attack: 0.002, release: 0.25, damped: true, bus: 'dry', detune: 4 },
   harp: { level: 0.62, cutoff: 7000, attack: 0.002, release: 0.4, damped: false, bus: 'wet', detune: 3 },
-  bell: { level: 0.55, cutoff: 2600, attack: 0.002, release: 1, damped: false, bus: 'far', detune: 0 },
+  bell: { level: 0.7, cutoff: 2600, attack: 0.002, release: 1, damped: false, bus: 'far', detune: 0 },
 };
 
 interface PadPatch {
@@ -69,14 +69,16 @@ const AMBS: Record<AmbToneId, AmbPatch> = {
   bird: { level: 0.3, bus: 'far' },
   swallow: { level: 0.26, bus: 'far' },
   robin: { level: 0.34, bus: 'far' },
-  hammer: { level: 0.5, bus: 'far', cutoff: 2600 },
-  thunder: { level: 1.3, bus: 'amb' },
+  hammer: { level: 0.6, bus: 'far', cutoff: 2600 },
+  thunder: { level: 1, bus: 'amb' },
 };
 
 /** Level into the master compressor; the voices are balanced well below full scale. */
-const MASTER_GAIN = 2.5;
+const MASTER_GAIN = 3;
 /** Ambience sits under the music; per-score levels are relative to this. */
-const AMB_TRIM = 0.25;
+const AMB_TRIM = 0.4;
+/** The continuous beds (river, wind, rain, snow) sit further down than single calls like birds or the bell. */
+const BED_TRIM = 0.35;
 
 function compressor(c: BaseAudioContext, threshold: number, ratio: number, attack: number, release: number): DynamicsCompressorNode {
   const n = c.createDynamicsCompressor();
@@ -534,6 +536,8 @@ export class Bed {
       return b;
     };
     const gain = (v: number) => node(s.gain(v));
+    const trim = gain(BED_TRIM);
+    trim.connect(out);
     const lfo = (freq: number, depth: number, target: AudioParam) => {
       const o = c.createOscillator();
       o.frequency.value = freq;
@@ -553,21 +557,21 @@ export class Bed {
     const wGain = gain(w.level);
     loop('waterA').connect(panner(-0.35)).connect(wLP);
     loop('waterB', 0.93).connect(panner(0.35)).connect(wLP);
-    wLP.connect(wGain).connect(out);
+    wLP.connect(wGain).connect(trim);
     lfo(0.06, w.level * 0.18, wGain.gain);
     if (w.roar) {
       const rLP = filter('lowpass', 700, 0.4);
       const rGain = gain(w.roar);
-      loop('brown').connect(rLP).connect(rGain).connect(out);
+      loop('brown').connect(rLP).connect(rGain).connect(trim);
       lfo(0.045, w.roar * 0.3, rGain.gain);
       const rush = filter('bandpass', 900, 0.5);
-      loop('pink', 0.8).connect(rush).connect(gain(w.roar * 0.6)).connect(out);
+      loop('pink', 0.8).connect(rush).connect(gain(w.roar * 0.6)).connect(trim);
     }
     if (spec.wind) {
       const bp = filter('bandpass', 520, 1.4);
       const wg = gain(spec.wind);
       const wp = panner(0);
-      loop('pink', 1.1).connect(bp).connect(wg).connect(wp).connect(out);
+      loop('pink', 1.1).connect(bp).connect(wg).connect(wp).connect(trim);
       lfo(0.061, 260, bp.frequency);
       lfo(0.17, 110, bp.frequency);
       lfo(0.083, spec.wind * 0.55, wg.gain);
@@ -579,19 +583,19 @@ export class Bed {
       const rg = gain(level);
       loop('rainA').connect(panner(-0.3)).connect(hp);
       loop('rainB', 1.07).connect(panner(0.3)).connect(hp);
-      hp.connect(rg).connect(out);
+      hp.connect(rg).connect(trim);
       if (ease) {
         rg.gain.setValueAtTime(level, when + ease.at);
         rg.gain.linearRampToValueAtTime(level * ease.to, when + ease.at + ease.over);
       }
       if (heavy) {
-        loop('pink', 0.9).connect(filter('bandpass', 1800, 0.4)).connect(gain(level * 1.1)).connect(out);
-        loop('brown', 1.2).connect(filter('lowpass', 260, 0.5)).connect(gain(level * 0.7)).connect(out);
+        loop('pink', 0.9).connect(filter('bandpass', 1800, 0.4)).connect(gain(level * 1.1)).connect(trim);
+        loop('brown', 1.2).connect(filter('lowpass', 260, 0.5)).connect(gain(level * 0.7)).connect(trim);
       }
     }
     if (spec.snow) {
       const sg = gain(spec.snow);
-      loop('pink', 0.7).connect(filter('lowpass', 900, 0.5)).connect(filter('highpass', 180, 0.5)).connect(sg).connect(out);
+      loop('pink', 0.7).connect(filter('lowpass', 900, 0.5)).connect(filter('highpass', 180, 0.5)).connect(sg).connect(trim);
       lfo(0.05, spec.snow * 0.3, sg.gain);
     }
   }
