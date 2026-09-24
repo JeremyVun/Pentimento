@@ -3,6 +3,7 @@ import '@fontsource/eb-garamond/latin-400-italic.css';
 import '@fontsource/eb-garamond/latin-500.css';
 import './style.css';
 import { createAudioEngine } from './audio';
+import { engineStats } from './audio/debug';
 import { Brush } from './brush';
 import { Game } from './game';
 import { Painter } from './gl/painter';
@@ -35,7 +36,7 @@ function start(): void {
   const brush = new Brush(view.board);
   const narration = new Narration(view.narrationRoot);
   const game = new Game(painter, audio, brush, narration, view);
-  (window as unknown as { __game: Game }).__game = game;
+  Object.assign(window as object, { __game: game, __audioStats: () => engineStats.get(audio)?.() });
 
   const speed = Number(params.get('speed') || 1);
   let last = performance.now();

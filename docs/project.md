@@ -15,7 +15,8 @@ A pentimento is an earlier painting that shows through the paint on top of it. T
 ## How it plays
 
 - The board starts blank. A pencil sketch shows the new view over the old paint.
-- Hold the mouse button, or touch, to paint. Wherever you paint, the new year comes alive: water flows, clouds drift, people move. Where you don't paint, the old years stay, dry and still.
+- Click, or tap, to pour paint. It flows out from the cursor and fills the shape you clicked (the sky, the river, the fig tree, the garden) and stops at its edges. Holding pours more, so it spreads further; dragging leaves a trail of pours. Wherever paint lands, the new year comes alive: water flows, clouds drift, people move. Where you don't pour, the old years stay, dry and still.
+- Pouring replaced dragging a brush after Jeremy found brushing the whole board by hand tiring (2026-09-25).
 - Each sitting lasts as long as its music, roughly a minute and a half. The busy year with a newborn is shorter. Then the paint dries and the next year begins on top of it.
 - Some things in the view carry a memory. Paint enough of one and it wakes up (the ferryman waves, the swallows swoop) and the narrator tells you about it. Things you don't paint keep their memories.
 - The last sitting belongs to the grandchild, twenty years later. Afterwards you can hold the brush down to lift the paint and see every year underneath. You can save the finished board as an image.
@@ -49,7 +50,7 @@ A church bell strikes eight three times in the game: when Joe first crosses the 
 
 1. Scaffold (Vite + TypeScript, WebGL2, Web Audio, no external art or audio files).
 2. Scene: a Canvas2D renderer draws the living view per chapter as flat shapes.
-3. Paint: WebGL turns the scene into gouache (flowing brush strokes, bristle texture, paper, wet-to-matte drying), and composites your painting over the dried layers.
+3. Paint: WebGL turns the scene into gouache (flowing brush strokes, bristle texture, paper, wet-to-matte drying), and composites your painting over the dried layers. Poured paint spreads on the GPU through a region map drawn from the scene itself (`src/scene/regions.ts`).
 4. Story: chapter flow, narration, memories, pencil sketch, title cards.
 5. Music: a generative score per chapter, a recurring motif, and a musical brush (built by a subagent against `docs/contracts/audio.md`).
 6. Ending: lifting layers, saving the board, starting again.
