@@ -1,7 +1,7 @@
 import { GL, Program, Target, bindTarget, clearTarget, createFloatTarget, createTarget } from './gl';
 import {
   BASE_FS, COMPOSITE_FS, DAB_FS, DAB_VS, FULLSCREEN_VS, HOLD_FS, OUTLINE_FS, PAPER_FS, POUR_DOWN_FS, POUR_SEED_FS, POUR_SEED_VS, POUR_SPREAD_FS,
-  SKETCH_LINE_FS, STROKE_FS, STROKE_VS,
+  RESAMPLE_FS, RESAMPLE_LAYER_FS, ROUGH_FS, SKETCH_LINE_FS, STATIC_FLOW_FS, STATIC_FS, STROKE_FS, STROKE_VS, variant,
 } from './shaders';
 
 export const ASPECT = 1.6;
@@ -82,6 +82,18 @@ export interface CompositeParams {
   figureBlur?: number;
 }
 
+/** How much work the painter does per frame. The full look is `{ scale: 1, baked: false, lean: false }`. */
+export interface Look {
+  /** Internal resolution as a share of the full one. Pour maps, scene canvases and noise scales stay at full size. */
+  scale: number;
+  /** Fixed noise is worked out once into textures instead of for every pixel of every frame; it looks the same to within a shade. */
+  baked: boolean;
+  /** Pencil figures find their edges with four taps instead of nine. */
+  lean: boolean;
+}
+
+export const FULL_LOOK: Look = { scale: 1, baked: false, lean: false };
+
 export interface Dab {
   x: number;
   y: number;
@@ -130,8 +142,28 @@ function lineTarget(gl: GL, w: number, h: number): Target | null {
 
 export class Painter {
   readonly gl: GL;
-  readonly w: number;
-  readonly h: number;
+  /** The full-quality size. Noise, strokes and pour maps are sized from it, so a lower `scale` only draws fewer pixels. */
+  readonly baseW: number;
+  readonly baseH: number;
+  /** The size drawn at now. */
+  w: number;
+  h: number;
+  private look: Look = FULL_LOOK;
+  private variants = new Map<string, Program>();
+  private pPaper: Program;
+  private pStatic: Program | null = null;
+  private pStaticFlow: Program | null = null;
+  private pRough: Program | null = null;
+  private pResample: Program | null = null;
+  private pResampleLayer: Program | null = null;
+  private staticA: Target | null = null;
+  private staticB: Target | null = null;
+  private staticFbo: WebGLFramebuffer | null = null;
+  private staticFlow: Target | null = null;
+  private rough: Target | null = null;
+  private roughSeed = NaN;
+  /** Nothing ever paints into the mask while pouring, so drying it is skipped while it is known to be empty. */
+  private maskEmpty = true;
   private paper: Target;
   private living: Target;
   private held: [Target, Target];
@@ -192,8 +224,8 @@ export class Painter {
     });
     if (!gl) throw new Error('WebGL2 is not available');
     this.gl = gl;
-    this.w = Math.round(width);
-    this.h = Math.round(width / ASPECT);
+    this.baseW = this.w = Math.round(width);
+    this.baseH = this.h = Math.round(width / ASPECT);
     canvas.width = this.w;
     canvas.height = this.h;
 
@@ -208,7 +240,7 @@ export class Painter {
     this.pDown = new Program(gl, FULLSCREEN_VS, POUR_DOWN_FS);
     this.pHold = new Program(gl, FULLSCREEN_VS, HOLD_FS);
     this.pSketchLine = new Program(gl, FULLSCREEN_VS, SKETCH_LINE_FS);
-    const pPaper = new Program(gl, FULLSCREEN_VS, PAPER_FS);
+    this.pPaper = new Program(gl, FULLSCREEN_VS, PAPER_FS);
 
     this.emptyVao = gl.createVertexArray()!;
     this.dabVao = gl.createVertexArray()!;
@@ -261,13 +293,187 @@ export class Painter {
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
+    this.drawPaper();
+    this.resetBoard();
+  }
+
+  private drawPaper(): void {
+    const gl = this.gl;
     bindTarget(gl, this.paper);
     gl.disable(gl.BLEND);
-    pPaper.use().f('uRes', w, h);
+    this.pPaper.use().f('uRes', this.baseW, this.baseH);
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
 
-    this.resetBoard();
+  /** Pass `name` with this look's shader switches. The full look uses the programs made at the start, from exactly their source. */
+  private variant(name: 'base' | 'hold' | 'spread' | 'composite'): Program {
+    const defines = [...(this.look.baked ? ['BAKED'] : []), ...(name === 'composite' && this.look.lean ? ['LEAN'] : [])];
+    if (!defines.length) return { base: this.pBase, hold: this.pHold, spread: this.pSpread, composite: this.pComposite }[name];
+    const key = `${name}:${defines.join(',')}`;
+    let p = this.variants.get(key);
+    if (!p) {
+      const fs = { base: BASE_FS, hold: HOLD_FS, spread: POUR_SPREAD_FS, composite: COMPOSITE_FS }[name];
+      p = new Program(this.gl, FULLSCREEN_VS, variant(fs, defines));
+      this.variants.set(key, p);
+    }
+    return p;
+  }
+
+  get currentLook(): Look {
+    return this.look;
+  }
+
+  /**
+   * Switches how much work each frame does. A new scale remakes every full-size target, carrying the dried years, the
+   * held picture and the snapshots across by resampling. Only call it when nothing is wet: the mask and lift are cleared.
+   */
+  setLook(look: Look): void {
+    const old = this.look;
+    this.look = { ...look };
+    const gl = this.gl;
+    if (look.scale !== old.scale) this.resize(look.scale);
+    if (look.baked && !old.baked) {
+      this.pStatic ??= new Program(gl, FULLSCREEN_VS, STATIC_FS);
+      this.pStaticFlow ??= new Program(gl, FULLSCREEN_VS, STATIC_FLOW_FS);
+      this.pRough ??= new Program(gl, FULLSCREEN_VS, ROUGH_FS);
+      this.rough = createTarget(gl, this.pour[0].w, this.pour[0].h, false, this.floatPaint);
+      this.roughSeed = NaN;
+      this.makeStatics();
+    } else if (!look.baked && old.baked) {
+      this.dropStatics();
+      if (this.rough) this.dropTarget(this.rough);
+      this.rough = null;
+    } else if (look.baked && look.scale !== old.scale) {
+      this.dropStatics();
+      this.makeStatics();
+    }
+    for (const name of ['base', 'hold', 'spread', 'composite'] as const) this.variant(name);
+  }
+
+  private dropTarget(t: Target): void {
+    this.gl.deleteFramebuffer(t.fbo);
+    this.gl.deleteTexture(t.tex);
+  }
+
+  private makeStatics(): void {
+    const gl = this.gl;
+    const { w, h } = this;
+    this.staticA = createTarget(gl, w, h, false);
+    this.staticB = createTarget(gl, w, h, false);
+    this.staticFlow = createTarget(gl, w, h, false);
+    this.staticFbo = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.staticFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.staticA.tex, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.staticB.tex, 0);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+    gl.viewport(0, 0, w, h);
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(this.emptyVao);
+    this.pStatic!.use().f('uRes', this.baseW, this.baseH).f('uAspect', ASPECT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.drawStaticFlow();
+  }
+
+  private dropStatics(): void {
+    for (const t of [this.staticA, this.staticB, this.staticFlow]) if (t) this.dropTarget(t);
+    if (this.staticFbo) this.gl.deleteFramebuffer(this.staticFbo);
+    this.staticA = this.staticB = this.staticFlow = null;
+    this.staticFbo = null;
+  }
+
+  private drawStaticFlow(): void {
+    if (!this.staticFlow) return;
+    const gl = this.gl;
+    bindTarget(gl, this.staticFlow);
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(this.emptyVao);
+    this.pStaticFlow!.use().tex('uFlow', 0, this.flowTex).f('uAspect', ASPECT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  private drawRough(seed: number): void {
+    const gl = this.gl;
+    this.roughSeed = seed;
+    bindTarget(gl, this.rough!);
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(this.emptyVao);
+    this.pRough!.use().f('uAspect', ASPECT).f('uSeed', seed);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  private resize(scale: number): void {
+    const gl = this.gl;
+    const w = Math.round(this.baseW * scale);
+    const h = Math.round(w / ASPECT);
+    const down = w < this.w;
+    const spread: [number, number] = down ? [0.25 / w, 0.25 / h] : [0, 0];
+    this.pResample ??= new Program(gl, FULLSCREEN_VS, RESAMPLE_FS);
+    this.pResampleLayer ??= new Program(gl, FULLSCREEN_VS, RESAMPLE_LAYER_FS);
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(this.emptyVao);
+    const carry = (src: Target): Target => {
+      const t = createTarget(gl, w, h);
+      bindTarget(gl, t);
+      this.pResample!.use().tex('uSrc', 0, src.tex).f('uSpread', ...spread);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      this.dropTarget(src);
+      return t;
+    };
+    const [r, g, b] = PAPER_RGB;
+    const fresh = (old: Target, half = false): Target => {
+      this.dropTarget(old);
+      return createTarget(gl, w, h, true, half);
+    };
+    this.dry[this.dryIdx] = carry(this.dry[this.dryIdx]);
+    this.dry[1 - this.dryIdx] = fresh(this.dry[1 - this.dryIdx]);
+    clearTarget(gl, this.dry[1 - this.dryIdx], r, g, b);
+    this.held[this.heldIdx] = carry(this.held[this.heldIdx]);
+    this.held[1 - this.heldIdx] = fresh(this.held[1 - this.heldIdx]);
+    clearTarget(gl, this.held[1 - this.heldIdx], r, g, b);
+
+    const snaps = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, snaps);
+    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, w, h, MAX_LAYERS);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fbo = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, w, h);
+    for (let layer = 0; layer < MAX_LAYERS; layer++) {
+      gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, snaps, 0, layer);
+      this.pResampleLayer!.use().tex('uSrc', 0, this.snaps, gl.TEXTURE_2D_ARRAY).f('uLayer', layer).f('uSpread', ...spread);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fbo);
+    gl.deleteTexture(this.snaps);
+    this.snaps = snaps;
+
+    this.living = fresh(this.living);
+    this.mask = fresh(this.mask, this.floatPaint);
+    this.lift = fresh(this.lift, this.floatPaint);
+    this.paper = fresh(this.paper);
+    if (this.exportTarget) this.dropTarget(this.exportTarget);
+    this.exportTarget = null;
+    this.w = w;
+    this.h = h;
+    this.canvas.width = w;
+    this.canvas.height = h;
+    this.drawPaper();
+    const wasFull = !this.maskEmpty;
+    this.clearMask();
+    if (wasFull) this.fillMask();
+    this.clearLift();
+    if (this.sketchLine) {
+      this.dropTarget(this.sketchLine);
+      this.sketchLine = lineTarget(gl, w, h);
+      this.drawSketchLine();
+    }
   }
 
   private makeInputTexture(): WebGLTexture {
@@ -303,10 +509,15 @@ export class Painter {
 
   uploadFlow(src: TexImageSource): void {
     this.upload(this.flowTex, src);
+    this.drawStaticFlow();
   }
 
   uploadSketch(src: TexImageSource): void {
     this.upload(this.sketchTex, src);
+    this.drawSketchLine();
+  }
+
+  private drawSketchLine(): void {
     if (!this.sketchLine) return;
     const gl = this.gl;
     bindTarget(gl, this.sketchLine);
@@ -315,7 +526,7 @@ export class Painter {
     this.pSketchLine.use()
       .tex('uSketch', 0, this.sketchTex)
       .tex('uPaper', 1, this.paper.tex)
-      .f('uRes', this.w, this.h)
+      .f('uRes', this.baseW, this.baseH)
       .f('uFlipY', 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -351,6 +562,7 @@ export class Painter {
     this.pourFence = null;
     this.holds = [];
     this.snapFrom = 0;
+    this.maskEmpty = true;
     clearTarget(this.gl, this.mask, 0, 0, 0, 0);
     clearTarget(this.gl, this.pour[0], 0, 0, 0, 0);
     clearTarget(this.gl, this.pour[1], 0, 0, 0, 0);
@@ -365,6 +577,7 @@ export class Painter {
     const gl = this.gl;
     this.clearMask();
     const t = Math.ceil(0.028 * this.h) + 1;
+    this.maskEmpty = false;
     bindTarget(gl, this.mask);
     gl.enable(gl.SCISSOR_TEST);
     gl.scissor(t, t, this.w - 2 * t, this.h - 2 * t);
@@ -380,7 +593,9 @@ export class Painter {
     bindTarget(gl, this.living);
     gl.bindVertexArray(this.emptyVao);
     gl.disable(gl.BLEND);
-    this.pBase.use()
+    const base = this.variant('base').use();
+    if (this.look.baked) base.tex('uStaticB', 2, this.staticB!.tex).tex('uStaticFlow', 3, this.staticFlow!.tex);
+    base
       .tex('uScene', 0, this.sceneTex)
       .tex('uFlow', 1, this.flowTex)
       .f('uTime', p.time)
@@ -398,7 +613,7 @@ export class Painter {
     const s = this.pStroke.use()
       .tex('uScene', 0, this.sceneTex)
       .tex('uFlow', 1, this.flowTex)
-      .f('uRes', this.w, this.h)
+      .f('uRes', this.baseW, this.baseH)
       .f('uAspect', ASPECT)
       .f('uTime', p.time)
       .f('uAngle', p.angle)
@@ -408,7 +623,7 @@ export class Painter {
       .f('uTin', h.tin)
       .f('uScrub', h.scrub)
       .f('uBroken', h.broken);
-    const k = (this.h / 1000) * p.strokeScale;
+    const k = (this.baseH / 1000) * p.strokeScale;
     const areaK = (1 / (p.strokeScale * p.strokeScale));
     p.layers.forEach((l, i) => {
       s.f('uSeed', i * 13.7 + 1)
@@ -424,7 +639,7 @@ export class Painter {
       gl.bindVertexArray(this.emptyVao);
       this.pOutline.use()
         .tex('uScene', 0, this.sceneTex)
-        .f('uRes', this.w, this.h)
+        .f('uRes', this.baseW, this.baseH)
         .f('uAspect', ASPECT)
         .f('uLod', lod)
         .f('uOutline', h.outline);
@@ -441,7 +656,9 @@ export class Painter {
     bindTarget(gl, dst);
     gl.bindVertexArray(this.emptyVao);
     gl.disable(gl.BLEND);
-    this.pHold.use()
+    const hold = this.variant('hold').use();
+    if (this.look.baked) hold.tex('uStaticB', 3, this.staticB!.tex);
+    hold
       .tex('uHeld', 0, src.tex)
       .tex('uLiving', 1, this.living.tex)
       .tex('uPour', 2, this.pour[this.pourIdx].tex)
@@ -449,7 +666,7 @@ export class Painter {
       .f('uAspect', ASPECT)
       .f('uHoldN', this.holds.length / 4)
       .f('uSnapFrom', this.snapFrom);
-    if (this.holds.length > 0) gl.uniform4fv(this.pHold.loc('uHolds'), this.holds);
+    if (this.holds.length > 0) gl.uniform4fv(hold.loc('uHolds'), this.holds);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     this.snapFrom = this.holds.length / 4;
     this.heldIdx = 1 - this.heldIdx;
@@ -487,6 +704,7 @@ export class Painter {
   }
 
   paint(dabs: Dab[]): void {
+    this.maskEmpty = false;
     this.drawDabs(this.mask, dabs, 0.5);
   }
 
@@ -515,7 +733,7 @@ export class Painter {
     if (this.dryDue < this.dryStep(rate)) return;
     const t = this.dryDue;
     this.dryDue = 0;
-    this.decay(this.mask, 1, Math.exp(-t * rate));
+    if (!this.maskEmpty) this.decay(this.mask, 1, Math.exp(-t * rate));
     this.decay(this.pour[this.pourIdx], 1, Math.exp(-t * rate), Math.exp(-t * 0.8));
   }
 
@@ -565,14 +783,18 @@ export class Painter {
     this.spreadDue = Math.min(MAX_SPREAD_PASSES, this.spreadDue + dt * SPREAD_PASSES);
     const passes = Math.floor(this.spreadDue);
     this.spreadDue -= passes;
+    if (passes > 0 && this.look.baked && seed !== this.roughSeed) this.drawRough(seed);
     gl.bindVertexArray(this.emptyVao);
     gl.disable(gl.BLEND);
+    const spreadProg = this.variant('spread');
     for (let i = 0; i < passes; i++) {
       const src = this.pour[this.pourIdx];
       const dst = this.pour[1 - this.pourIdx];
       bindTarget(gl, dst);
       this.spreadSet = 1 - this.spreadSet;
-      this.pSpread.use()
+      spreadProg.use();
+      if (this.look.baked) spreadProg.tex('uRough', 2, this.rough!.tex);
+      spreadProg
         .tex('uPour', 0, src.tex)
         .tex('uRegion', 1, this.regionTex)
         .i('uSet', this.spreadSet)
@@ -640,7 +862,9 @@ export class Painter {
     else bindTarget(gl, null, this.w, this.h);
     gl.bindVertexArray(this.emptyVao);
     gl.disable(gl.BLEND);
-    this.pComposite.use()
+    const comp = this.variant('composite').use();
+    if (this.look.baked) comp.tex('uStaticA', 11, this.staticA!.tex).tex('uStaticB', 12, this.staticB!.tex);
+    comp
       .tex('uDry', 0, this.dry[this.dryIdx].tex)
       .tex('uLiving', 1, this.held[this.heldIdx].tex)
       .tex('uMask', 2, this.mask.tex)
@@ -659,7 +883,7 @@ export class Painter {
       .f('uAspect', ASPECT)
       .f('uTime', c.time)
       .f('uLivingAmt', c.living)
-      .f('uRes', this.w, this.h)
+      .f('uRes', this.baseW, this.baseH)
       .f('uPaperCol', ...PAPER_RGB)
       .f('uDryFade', c.dryFade)
       .f('uPulse', ...(c.pulse ?? [0, 0, 1, 1]))
@@ -675,7 +899,7 @@ export class Painter {
       .f('uFigLines', c.figureLines ?? 1)
       .f('uFigBlur', c.figureBlur ?? 0)
       .f('uHasLine', this.sketchLine ? 1 : 0);
-    if (this.sketchLine) this.pComposite.tex('uSketchLine', 10, this.sketchLine.tex);
+    if (this.sketchLine) comp.tex('uSketchLine', 10, this.sketchLine.tex);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

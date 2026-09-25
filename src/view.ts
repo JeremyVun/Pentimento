@@ -1,5 +1,6 @@
 import { Painter } from './gl/painter';
 import { livingParams, needsMip } from './hand';
+import { TIERS, tierNamed } from './quality';
 import { SCENES } from './scene/config';
 import { drawScene } from './scene/draw';
 import { drawFlow } from './scene/flow';
@@ -15,10 +16,12 @@ export function runViewer(params: URLSearchParams): void {
   document.body.appendChild(board);
   const width = Number(params.get('w') || 1600);
   const painter = new Painter(board, width);
+  const tier = TIERS[Math.max(0, tierNamed(params.get('quality')))];
+  if (tier !== TIERS[0]) painter.setLook(tier.look);
   const sceneScale = 0.62;
   const sc = document.createElement('canvas');
-  sc.width = Math.round(painter.w * sceneScale);
-  sc.height = Math.round(painter.h * sceneScale);
+  sc.width = Math.round(painter.baseW * sceneScale);
+  sc.height = Math.round(painter.baseH * sceneScale);
   const sctx = sc.getContext('2d')!;
   const fc = document.createElement('canvas');
   fc.width = 256;
@@ -41,9 +44,9 @@ export function runViewer(params: URLSearchParams): void {
   const layout = () => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const s = Math.min(vw * 0.96 / painter.w, vh * 0.96 / painter.h);
-    board.style.width = `${painter.w * s}px`;
-    board.style.height = `${painter.h * s}px`;
+    const s = Math.min(vw * 0.96 / painter.baseW, vh * 0.96 / painter.baseH);
+    board.style.width = `${painter.baseW * s}px`;
+    board.style.height = `${painter.baseH * s}px`;
   };
   layout();
   window.addEventListener('resize', layout);
@@ -51,7 +54,7 @@ export function runViewer(params: URLSearchParams): void {
     const t = freeze ? t0 : t0 + (performance.now() - start) / 1000;
     drawScene(sctx, sc.height, { cfg, t, sketch: false, woke: Object.fromEntries(Object.entries(woke).map(([k, v]) => [k, v + t - t0])) });
     painter.uploadScene(sc, needsMip(cfg));
-    painter.renderLiving(livingParams(cfg, t, { follow: 1 }));
+    painter.renderLiving(livingParams(cfg, t, { follow: 1, quality: tier.strokes }));
     painter.present({ time: t, sketch, wash: 0, living: mask === 'none' ? 0 : 1, dryFade: 0, liftMode: false, layers: 1 });
     (window as unknown as { __frames: number }).__frames = ((window as unknown as { __frames: number }).__frames || 0) + 1;
     requestAnimationFrame(frame);

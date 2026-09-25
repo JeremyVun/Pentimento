@@ -8,6 +8,7 @@ import { drawFigures, drawGhosts, momentSpot, type Spot } from './scene/actors';
 import { drawScene } from './scene/draw';
 import { drawFlow } from './scene/flow';
 import { drawRegions } from './scene/regions';
+import { TIERS, type Governor } from './quality';
 import { CHAPTERS, UI, type Chapter } from './story';
 import type { View } from './view-dom';
 
@@ -97,17 +98,19 @@ export class Game {
     private brush: Brush,
     private narration: Narration,
     private view: View,
+    private governor: Governor | null = null,
+    private tier = 0,
   ) {
     this.sceneCanvas = document.createElement('canvas');
-    this.sceneCanvas.width = Math.round(painter.w * this.sceneScale);
-    this.sceneCanvas.height = Math.round(painter.h * this.sceneScale);
+    this.sceneCanvas.width = Math.round(painter.baseW * this.sceneScale);
+    this.sceneCanvas.height = Math.round(painter.baseH * this.sceneScale);
     this.sceneCtx = this.sceneCanvas.getContext('2d', { alpha: false })!;
     this.flowCanvas = document.createElement('canvas');
     this.flowCanvas.width = 256;
     this.flowCanvas.height = 160;
     this.sketchCanvas = document.createElement('canvas');
-    this.sketchCanvas.width = painter.w;
-    this.sketchCanvas.height = painter.h;
+    this.sketchCanvas.width = painter.baseW;
+    this.sketchCanvas.height = painter.baseH;
     this.figuresCanvas = document.createElement('canvas');
     this.figuresCanvas.width = this.sceneCanvas.width;
     this.figuresCanvas.height = this.sceneCanvas.height;
@@ -116,8 +119,8 @@ export class Game {
     this.ghostsCanvas.height = this.sceneCanvas.height;
 
     this.regionCanvas = document.createElement('canvas');
-    this.regionCanvas.width = Math.round(painter.w / 2);
-    this.regionCanvas.height = Math.round(painter.h / 2);
+    this.regionCanvas.width = Math.round(painter.baseW / 2);
+    this.regionCanvas.height = Math.round(painter.baseH / 2);
     brush.radius = BRUSH_RADIUS;
     brush.onFirstPaint = () => this.audio.unlock();
     narration.onVisible = (on) => this.audio.duck(on);
@@ -147,7 +150,20 @@ export class Game {
       const s = momentSpot(this.cfg, id, this.sceneT, this.woke(id));
       spots[id] = { state: m.state, u: s ? s.x / ASPECT : undefined, v: s?.y };
     }
-    return { phase: this.phase, chapter: this.chapter?.id ?? null, t: this.phaseT, sceneT: this.sceneT, coverage: this.coverage.total(), moments: spots };
+    return {
+      phase: this.phase, chapter: this.chapter?.id ?? null, t: this.phaseT, sceneT: this.sceneT, coverage: this.coverage.total(), moments: spots,
+      quality: { tier: TIERS[this.tier].name, size: `${this.painter.w}x${this.painter.h}`, ...this.governor?.stats },
+    };
+  }
+
+  /** Whether the last frame rendered the full living view, the work the quality tiers are judged on. */
+  heavy = false;
+
+  private applyTier(i: number, reason: string): void {
+    const from = TIERS[this.tier].name;
+    this.tier = i;
+    this.painter.setLook(TIERS[i].look);
+    console.debug(`[quality] ${from} -> ${TIERS[i].name} (${this.painter.w}x${this.painter.h}): ${reason}`);
   }
 
   /** QA only: jump straight to the lift ending with whatever is on the board. */
@@ -237,6 +253,7 @@ export class Game {
   }
 
   private setScene(cfg: SceneConfig): void {
+    this.governor?.quiet();
     this.cfg = { ...cfg, moments: cfg.moments && { ...cfg.moments } };
     this.sceneT = 0;
     this.wakeTimes = {};
@@ -321,6 +338,11 @@ export class Game {
         }
         const e = this.introEnd;
         const settled = Number.isFinite(e);
+        // Under the wash, before the pencil starts, nothing is wet and the board barely shows: the one time the look may change.
+        if (this.governor && t >= 0.9 && (!settled || t < e - 2.4)) {
+          const d = this.governor.safeMoment();
+          if (d) this.applyTier(d.tier, d.reason);
+        }
         if (first) this.wash = settled ? 1 - ramp(t, e - 1.4, e) : 1;
         else this.wash = 0.55 * ramp(t, 0, 0.9) * (settled ? 1 - ramp(t, e - 1.3, e) : 1);
         this.sketch = settled ? ramp(t, e - 2.4, e) : 0;
@@ -384,6 +406,7 @@ export class Game {
         this.sketch = 1 - ramp(t, 0, 1.2);
         if (!this.baked && t >= 1.3) {
           this.baked = true;
+          this.governor?.quiet();
           this.painter.bake(this.chapterIndex);
           this.living = 0;
         }
@@ -694,23 +717,10 @@ export class Game {
     };
   }
 
-  private quality = 1;
-  private slowFrames = 0;
-
-  /** Thins the brush strokes if frames keep running long. */
-  private adapt(frameSec: number): void {
-    if (frameSec > 0.024 && frameSec < 0.25) this.slowFrames++;
-    else this.slowFrames = Math.max(0, this.slowFrames - 1);
-    if (this.slowFrames > 90 && this.quality > 0.45) {
-      this.quality *= 0.8;
-      this.slowFrames = 0;
-    }
-  }
-
-  render(time: number, frameSec = 1 / 60): void {
-    this.adapt(frameSec);
+  render(time: number): void {
     const needsLiving = this.living > 0 && (this.phase === 'title' || this.phase === 'opening'
       || this.phase === 'painting' || (this.phase === 'drying' && !this.baked) || (this.phase === 'intro' && this.phaseT > this.introEnd - 1.5));
+    this.heavy = needsLiving;
     if (needsLiving) {
       const woke: Record<string, number> = {};
       for (const [k, v] of Object.entries(this.wakeTimes)) woke[k] = this.sceneT - v;
@@ -729,7 +739,7 @@ export class Game {
       this.painter.renderLiving(livingParams(this.cfg, this.sceneT * slow, {
         warp: this.reducedMotion ? 0.3 : 1,
         follow: this.phase === 'title' || this.phase === 'opening' ? 1 : 0,
-        quality: this.quality,
+        quality: TIERS[this.tier].strokes,
       }));
     }
     this.painter.present(this.compositeParams(time));

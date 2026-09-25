@@ -138,6 +138,10 @@ uniform float uAspect;
 uniform float uWarp;
 uniform float uBlur;
 uniform float uLod;
+#ifdef BAKED
+uniform sampler2D uStaticB;
+uniform sampler2D uStaticFlow;
+#endif
 out vec4 outColor;
 void main() {
   vec2 uv = vUV;
@@ -161,6 +165,12 @@ void main() {
   } else {
     col = textureLod(uScene, wuv, uLod).rgb;
   }
+#ifdef BAKED
+  ivec2 sp = ivec2(gl_FragCoord.xy);
+  float streak = texelFetch(uStaticFlow, sp, 0).r * 2.0 - 1.0;
+  col *= 1.0 + streak * 0.035;
+  float blot = texelFetch(uStaticB, sp, 0).g;
+#else
   vec4 fl = texture(uFlow, uv);
   float ang = fl.b > 0.004 ? (fl.b - 0.5) * 3.14159 : 0.0;
   vec2 d = vec2(cos(ang), sin(ang));
@@ -168,6 +178,7 @@ void main() {
   float streak = snoise(vec2(r.x * 5.0, r.y * 140.0)) * 0.6 + snoise(vec2(r.x * 2.0, r.y * 45.0)) * 0.4;
   col *= 1.0 + streak * 0.035;
   float blot = fbm(q * 7.0 + 3.0);
+#endif
   col = mix(col, col * (0.94 + 0.12 * blot), 0.6);
   float l = lum(col);
   col = mix(vec3(l), col, 0.9);
@@ -433,6 +444,9 @@ uniform sampler2D uRegion;
 uniform float uAspect;
 uniform float uSeed;
 uniform int uSet;
+#ifdef BAKED
+uniform sampler2D uRough;
+#endif
 out vec4 outColor;
 const ivec2 SET_A[8] = ivec2[8](ivec2(2, 0), ivec2(-2, 0), ivec2(0, 2), ivec2(0, -2), ivec2(1, 1), ivec2(1, -1), ivec2(-1, 1), ivec2(-1, -1));
 const ivec2 SET_B[8] = ivec2[8](ivec2(2, 1), ivec2(-2, -1), ivec2(1, -2), ivec2(-1, 2), ivec2(2, -1), ivec2(-2, 1), ivec2(1, 2), ivec2(-1, -2));
@@ -442,8 +456,12 @@ void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   vec4 c = texelFetch(uPour, p, 0);
   float me = rid(p);
+#ifdef BAKED
+  float rough = 0.7 + 2.0 * texelFetch(uRough, p, 0).r;
+#else
   vec2 q0 = vUV * vec2(uAspect, 1.0);
   float rough = 0.7 + 1.1 * vnoise(q0 * 70.0 + uSeed) + 0.9 * vnoise(q0 * 9.0 - uSeed);
+#endif
   float unit = rough / float(size.y);
   float best = c.r;
   float fresh = c.a;
@@ -488,11 +506,18 @@ uniform float uAspect;
 uniform vec4 uHolds[4];
 uniform float uHoldN;
 uniform float uSnapFrom;
+#ifdef BAKED
+uniform sampler2D uStaticB;
+#endif
 out vec4 outColor;
 void main() {
   vec4 p = texture(uPour, vUV);
   float wet = p.g * max(step(0.0005, p.r), p.b);
+#ifdef BAKED
+  float n = texelFetch(uStaticB, ivec2(gl_FragCoord.xy), 0).r;
+#else
   float n = fbm(vUV * vec2(uAspect, 1.0) * 7.0);
+#endif
   float setsAt = 0.05 + 0.32 * n;
   float follow = step(setsAt, wet);
   vec2 s = vUV * vec2(uAspect, 1.0);
@@ -589,6 +614,12 @@ uniform float uAttnAmt;
 uniform float uFigBlur;
 uniform sampler2D uSketchLine;
 uniform float uHasLine;
+#ifdef BAKED
+uniform sampler2D uStaticA;
+uniform sampler2D uStaticB;
+vec4 gStaticA;
+vec4 gStaticB;
+#endif
 out vec4 outColor;
 ${SKETCH}
 
@@ -596,10 +627,29 @@ vec3 graphiteOver(vec3 c) {
   return mix(c * 0.58 + vec3(0.03, 0.03, 0.035), c + vec3(0.18), smoothstep(0.42, 0.2, lum(c)));
 }
 
+#ifdef LEAN
+float crossEdge(sampler2D s, vec2 uv) {
+  vec2 e = 1.0 / vec2(textureSize(s, 0));
+  vec3 l = texture(s, uv - vec2(e.x, 0.0)).rgb;
+  vec3 r = texture(s, uv + vec2(e.x, 0.0)).rgb;
+  vec3 u = texture(s, uv - vec2(0.0, e.y)).rgb;
+  vec3 d = texture(s, uv + vec2(0.0, e.y)).rgb;
+  return (length(r - l) + length(d - u)) * 4.0;
+}
+#endif
+
 /** Moving figures in pencil: a pale silhouette, graphite edges, and reds and yellows in colour. */
 vec3 pencilFigures(vec3 col, sampler2D tex, vec2 uv, float away, float tooth) {
+#ifdef BAKED
+  vec2 j = (gStaticB.ba * 2.0 - 1.0) * 0.0008;
+#else
   vec2 j = vec2(snoise(uv * 40.0 + 3.0), snoise(uv * 40.0 + 11.0)) * 0.0008;
+#endif
+#ifdef LEAN
+  float line = smoothstep(0.3, 0.85, crossEdge(tex, uv + j));
+#else
   float line = smoothstep(0.3, 0.85, edgeOf(tex, uv + j));
+#endif
   line *= 0.6 + 0.4 * tooth;
   vec3 fc = texture(tex, uv).rgb;
   if (uFigBlur > 0.0) {
@@ -623,7 +673,11 @@ float poured(vec2 uv) {
 
 float pourCoverage(vec2 uv) {
   vec2 t = 1.0 / vec2(textureSize(uPour, 0));
+#ifdef BAKED
+  vec2 j = gStaticA.ba - 0.5;
+#else
   vec2 j = vec2(vnoise(uv * uRes * 0.07), vnoise(uv * uRes * 0.07 + 13.0)) - 0.5;
+#endif
   float s = 0.0;
   s += poured(uv + j * t * 1.5) * 2.0;
   s += poured(uv + vec2(1.2, 0.7) * t);
@@ -639,18 +693,28 @@ vec3 wetLook(vec3 c, float wet, vec2 uv, float tooth) {
   hsv.y = min(1.0, hsv.y * (1.0 + 0.25 * wet));
   hsv.z *= 1.0 - 0.13 * wet;
   vec3 w = hsv2rgb(hsv);
+#ifdef BAKED
+  float spec = gStaticA.r;
+#else
   vec2 q = uv * vec2(uAspect, 1.0) * 14.0;
   float h0 = fbm(q), hx = fbm(q + vec2(0.15, 0.0)), hy = fbm(q + vec2(0.0, 0.15));
   vec3 n = normalize(vec3((h0 - hx) * 2.0, (h0 - hy) * 2.0, 1.0));
   vec3 L = normalize(vec3(-0.5, -0.6, 0.7));
   vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
   float spec = pow(max(dot(n, H), 0.0), 24.0);
+#endif
   return w + spec * wet * 0.1;
 }
 
 void main() {
   vec2 uv = vUV;
   if (uFlipY > 0.5) uv.y = 1.0 - uv.y;
+#ifdef BAKED
+  ivec2 sp = ivec2(gl_FragCoord.xy);
+  if (uFlipY > 0.5) sp.y = textureSize(uStaticA, 0).y - 1 - sp.y;
+  gStaticA = texelFetch(uStaticA, sp, 0);
+  gStaticB = texelFetch(uStaticB, sp, 0);
+#endif
   vec4 paper = texture(uPaper, uv);
   float tooth = paper.r;
 
@@ -697,7 +761,11 @@ void main() {
     vec4 pr = texture(uPour, uv);
     m.r = max(m.r, pourCoverage(uv) * 1.1);
     m.g = max(m.g, pr.g * max(smoothstep(0.0, 0.01, pr.r), pr.b));
+#ifdef BAKED
+    float streak = gStaticA.g;
+#else
     float streak = vnoise(uv * vec2(uAspect, 1.0) * vec2(120.0, 9.0));
+#endif
     float cov = m.r * uLivingAmt;
     float mEff = smoothstep(0.16, 0.6, cov + (tooth - 0.5) * 0.32 + (streak - 0.5) * 0.12);
     vec3 liv = texture(uLiving, uv).rgb;
@@ -772,3 +840,84 @@ void main() {
   outColor = vec4(col, 1.0);
 }
 `;
+
+// Fixed noise the composite, hold and base passes otherwise work out for every pixel of every frame, computed once
+// per size: A = wet sheen, paint streaks and the pour edge jitter; B = where paint sets, base blots and the pencil
+// figures' jitter. Values are those at each texel's own centre, unflipped.
+export const STATIC_FS = `${HEADER}${NOISE}
+in vec2 vUV;
+uniform vec2 uRes;
+uniform float uAspect;
+layout(location = 0) out vec4 outA;
+layout(location = 1) out vec4 outB;
+void main() {
+  vec2 uv = vUV;
+  vec2 q = uv * vec2(uAspect, 1.0) * 14.0;
+  float h0 = fbm(q), hx = fbm(q + vec2(0.15, 0.0)), hy = fbm(q + vec2(0.0, 0.15));
+  vec3 n = normalize(vec3((h0 - hx) * 2.0, (h0 - hy) * 2.0, 1.0));
+  vec3 L = normalize(vec3(-0.5, -0.6, 0.7));
+  vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
+  float spec = pow(max(dot(n, H), 0.0), 24.0);
+  float streak = vnoise(uv * vec2(uAspect, 1.0) * vec2(120.0, 9.0));
+  vec2 j = vec2(vnoise(uv * uRes * 0.07), vnoise(uv * uRes * 0.07 + 13.0));
+  outA = vec4(spec, streak, j);
+  vec2 s = uv * vec2(uAspect, 1.0);
+  float setN = fbm(s * 7.0);
+  float blot = fbm(s * 7.0 + 3.0);
+  vec2 fj = vec2(snoise(uv * 40.0 + 3.0), snoise(uv * 40.0 + 11.0)) * 0.5 + 0.5;
+  outB = vec4(setN, blot, fj);
+}
+`;
+
+// The base pass's paint streaks, which follow a scene's flow map, so they are worked out once per scene.
+export const STATIC_FLOW_FS = `${HEADER}${NOISE}
+in vec2 vUV;
+uniform sampler2D uFlow;
+uniform float uAspect;
+out vec4 outColor;
+void main() {
+  vec2 uv = vUV;
+  vec2 q = uv * vec2(uAspect, 1.0);
+  vec4 fl = texture(uFlow, uv);
+  float ang = fl.b > 0.004 ? (fl.b - 0.5) * 3.14159 : 0.0;
+  vec2 d = vec2(cos(ang), sin(ang));
+  vec2 r = vec2(dot(q, d), dot(q, vec2(-d.y, d.x)));
+  float streak = snoise(vec2(r.x * 5.0, r.y * 140.0)) * 0.6 + snoise(vec2(r.x * 2.0, r.y * 45.0)) * 0.4;
+  outColor = vec4(streak * 0.5 + 0.5, 0.0, 0.0, 1.0);
+}
+`;
+
+// How rough the paper is to poured paint, for one seed; the spread pass reads it instead of working it out each pass.
+export const ROUGH_FS = `${HEADER}${NOISE}
+in vec2 vUV;
+uniform float uAspect;
+uniform float uSeed;
+out vec4 outColor;
+void main() {
+  vec2 q0 = vUV * vec2(uAspect, 1.0);
+  float rough = 1.1 * vnoise(q0 * 70.0 + uSeed) + 0.9 * vnoise(q0 * 9.0 - uSeed);
+  outColor = vec4(rough * 0.5, 0.0, 0.0, 1.0);
+}
+`;
+
+// Resamples a dried picture to a new size: four bilinear taps spread over the new texel going down, one going up.
+const resample = (sampler: string, at: string) => `${HEADER}
+in vec2 vUV;
+uniform highp ${sampler} uSrc;
+uniform float uLayer;
+uniform vec2 uSpread;
+out vec4 outColor;
+vec4 tap(vec2 o) { return texture(uSrc, ${at}); }
+void main() {
+  outColor = 0.25 * (tap(vec2(-uSpread.x, -uSpread.y)) + tap(vec2(uSpread.x, -uSpread.y)) + tap(vec2(-uSpread.x, uSpread.y)) + tap(uSpread));
+}
+`;
+export const RESAMPLE_FS = resample('sampler2D', 'vUV + o');
+export const RESAMPLE_LAYER_FS = resample('sampler2DArray', 'vec3(vUV + o, uLayer)');
+
+/** The shader with `defines` switched on; with none it is exactly the source given. */
+export function variant(src: string, defines: string[]): string {
+  if (!defines.length) return src;
+  const nl = src.indexOf('\n');
+  return src.slice(0, nl + 1) + defines.map((d) => `#define ${d} 1\n`).join('') + src.slice(nl + 1);
+}

@@ -8,6 +8,7 @@ import { Brush } from './brush';
 import { Game } from './game';
 import { Painter } from './gl/painter';
 import { Narration } from './narration';
+import { GpuClock, Governor, TIERS, tierNamed } from './quality';
 import { UI } from './story';
 import { View } from './view-dom';
 import { runViewer } from './view';
@@ -27,6 +28,11 @@ function start(): void {
     view.fatal(UI.noWebgl);
     return;
   }
+  const forced = tierNamed(params.get('quality'));
+  if (forced > 0) painter.setLook(TIERS[forced].look);
+  // ?quality pins a tier. The QA harnesses' own GPU timers would clash with ours, so they leave the clock to fences.
+  const clock = forced < 0 ? new GpuClock(painter.gl, !params.has('perfmode')) : null;
+  const governor = new Governor(Math.max(0, forced), clock, forced >= 0);
   const audio = createAudioEngine();
   let stopped = false;
   const stop = (message: string) => {
@@ -48,7 +54,7 @@ function start(): void {
   view.onMute = (m) => audio.setMuted(m);
   const brush = new Brush(view.board);
   const narration = new Narration(view.narrationRoot);
-  const game = new Game(painter, audio, brush, narration, view);
+  const game = new Game(painter, audio, brush, narration, view, governor, Math.max(0, forced));
   Object.assign(window as object, { __game: game, __audioStats: () => engineStats.get(audio)?.() });
 
   const asked = Number(params.get('speed') || 1);
@@ -57,10 +63,18 @@ function start(): void {
   let frames = 0;
   const loop = (now: number) => {
     if (stopped) return;
+    if (!governor.frame(now)) {
+      requestAnimationFrame(loop);
+      return;
+    }
     const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)) * ((window as unknown as { __speed?: number }).__speed ?? speed);
     try {
+      const t0 = performance.now();
+      clock?.begin();
       game.update(dt);
-      game.render(now / 1000, (now - last) / 1000);
+      game.render(now / 1000);
+      clock?.end(game.heavy);
+      governor.drawn(now, performance.now() - t0, game.heavy);
     } catch (e) {
       console.error(e);
       stop(UI.crashed);
