@@ -43,9 +43,6 @@ function start(): void {
   window.addEventListener('error', (e) => {
     if (e.filename?.startsWith(location.origin)) stop(UI.crashed);
   });
-  window.addEventListener('unhandledrejection', (e) => {
-    if (e.reason instanceof Error && !(e.reason instanceof DOMException)) stop(UI.crashed);
-  });
   view.onMute = (m) => audio.setMuted(m);
   const brush = new Brush(view.board);
   const narration = new Narration(view.narrationRoot);
