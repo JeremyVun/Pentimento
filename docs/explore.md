@@ -69,6 +69,8 @@ What changed:
 
 He left the choice of the grandchild's leaving line to us: "You pick the line that you think works best for this game". The train note now says she moved away at eighteen, like June.
 
+What changed: each year is now painted in her hand at that age (`hand` in `src/scene/config.ts`). Nine gets a child's scrubbing strokes, simplified shapes, bright unmixed paint and wobbly outlines. Sixteen is bold and dramatic, forty-nine has practised broken colour, and seventy-two is pale and loose. The grandchild paints in her own crisp, flat style. Where a year isn't painted over, the older hand shows through, so the board reads as paintings on top of each other. The table is in `docs/styles.md`.
+
 ## Polish after the merge (2026-09-25)
 
 - Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.
