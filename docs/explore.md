@@ -70,6 +70,7 @@ What changed:
 - The people she only imagines (her father, Joe at seventy-two) are drawn on their own pencil layer that shows over wet paint too (`drawGhosts`).
 - Her age in the paint (`pour` in the scene config): at nine the paint spills into neighbouring shapes and splashes; at forty-four it bleeds, runs down in streaks and dries slowly.
 - After a sitting she gives at most six notes before the closing line. Moments are always told; painted things fill the rest.
+- The music plays on under her notes and resolves as her closing line begins. It used to stop as the paint dried, 30 to 60 s before the score's end, so she talked over the river alone.
 - Still to judge in motion: whether pencil Joe at seventy-two is noticeable enough.
 
 ## Prototype 2: reading and painting at separate times (built 2026-09-25)
