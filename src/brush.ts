@@ -119,7 +119,10 @@ export class Brush {
     el.addEventListener('pointerleave', () => { this.inside = false; this.onChange?.(); });
     window.addEventListener('keydown', (e) => this.keyDown(e));
     window.addEventListener('keyup', (e) => this.keyUp(e));
-    window.addEventListener('blur', () => this.release());
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.release();
+    });
   }
 
   private toUV(e: PointerEvent): { x: number; y: number } {
