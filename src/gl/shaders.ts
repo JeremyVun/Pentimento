@@ -429,7 +429,6 @@ uniform sampler2D uPour;
 uniform sampler2D uRegion;
 uniform float uAspect;
 uniform float uSeed;
-uniform float uPass;
 uniform int uSet;
 out vec4 outColor;
 const ivec2 SET_A[8] = ivec2[8](ivec2(2, 0), ivec2(-2, 0), ivec2(0, 2), ivec2(0, -2), ivec2(1, 1), ivec2(1, -1), ivec2(-1, 1), ivec2(-1, -1));
@@ -441,8 +440,7 @@ void main() {
   vec4 c = texelFetch(uPour, p, 0);
   float me = rid(p);
   vec2 q0 = vUV * vec2(uAspect, 1.0);
-  float rough = 0.8 + 1.5 * smoothstep(0.3, 0.7, fbm(q0 * 16.0 + uSeed)) + 0.6 * vnoise(q0 * 60.0 - uSeed);
-  rough *= 0.55 + 0.9 * smoothstep(0.2, 0.75, fbm(q0 * 4.0 + uSeed * 1.9));
+  float rough = 0.7 + 1.1 * vnoise(q0 * 70.0 + uSeed) + 0.9 * vnoise(q0 * 9.0 - uSeed);
   float unit = rough / float(size.y);
   float best = c.r;
   float fresh = c.a;
@@ -456,10 +454,6 @@ void main() {
     best = max(best, other ? min(n.r - cost, 0.004) : n.r - cost);
     if (!other) fresh = max(fresh, n.a - cost);
   }
-  // The paper takes the paint on only some passes, faster in some patches than others, so the wet front
-  // pushes out in lobes instead of growing as an octagon. It changes when paint arrives, never how far it reaches.
-  float takes = 0.15 + 0.85 * smoothstep(0.25, 0.7, fbm(q0 * 5.0 - uSeed * 0.7)) * (0.7 + 0.3 * vnoise(q0 * 40.0));
-  if (hash21(vec2(p) + fract(uPass * 0.618) * 97.0) > takes) { outColor = c; return; }
   float wet = c.g;
   if (best > c.r + 0.003 || fresh > c.a + 0.003) wet = 1.0;
   float painted = max(c.b, step(0.0005, best));

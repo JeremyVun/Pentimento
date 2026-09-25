@@ -7,7 +7,7 @@ import {
 export const ASPECT = 1.6;
 export const MAX_LAYERS = 10;
 /** Spread passes a second: a pour takes two to three seconds to flow across its shape. */
-const SPREAD_PASSES = 60;
+const SPREAD_PASSES = 40;
 export const PAPER_RGB: [number, number, number] = [0.953, 0.925, 0.868];
 
 export interface StrokeLayer {
@@ -138,7 +138,6 @@ export class Painter {
   private pDown: Program;
   private spreadSet = 0;
   private spreadDue = 0;
-  private spreadPass = 0;
   readonly coverageW = 160;
   readonly coverageH = 100;
   private coverageBytes = new Uint8Array(160 * 100 * 4);
@@ -494,8 +493,7 @@ export class Painter {
         .tex('uRegion', 1, this.regionTex)
         .i('uSet', this.spreadSet)
         .f('uAspect', ASPECT)
-        .f('uSeed', seed)
-        .f('uPass', ++this.spreadPass);
+        .f('uSeed', seed);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       this.pourIdx = 1 - this.pourIdx;
     }
