@@ -49,7 +49,6 @@ export interface Chapter {
 }
 
 export const TITLE = 'Pentimento';
-export const DEFINITION = 'A pentimento is an earlier painting that shows through the paint on top of it.';
 
 export const CHAPTERS: Chapter[] = [
   {
@@ -297,8 +296,6 @@ export const CHAPTERS: Chapter[] = [
 
 export const UI = {
   begin: 'Begin',
-  sound: 'Turn your sound on.',
-  keys: 'You can also move with the arrow keys and pour with Space.',
   rotate: 'Turn your phone sideways for a bigger painting.',
   hintMouse: 'Click to pour paint, or hold to pour more.',
   hintTouch: 'Tap to pour paint, or hold to pour more.',

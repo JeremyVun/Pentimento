@@ -1,5 +1,5 @@
 import { ASPECT } from './gl/painter';
-import { DEFINITION, TITLE, UI } from './story';
+import { TITLE, UI } from './story';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -8,6 +8,40 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: 
   parent.appendChild(e);
   return e;
 }
+
+/** A dry-brush stroke, used as a mask so buttons look like dabs of paint. */
+function brushSwatch(): string {
+  const w = 400;
+  const h = 120;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  if (!g) return 'none';
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.lineCap = 'round';
+  g.strokeStyle = '#000';
+  const rows = 70;
+  for (let i = 0; i < rows; i++) {
+    const t = i / (rows - 1);
+    const edge = Math.abs(t - 0.5) * 2;
+    const y = 12 + t * (h - 24) + (rand() - 0.5) * 3;
+    const x0 = 10 + rand() * 12 + edge ** 3 * 40 * rand();
+    const x1 = w - 12 - rand() * 18 - edge ** 2 * 70 * rand();
+    g.globalAlpha = edge > 0.8 ? 0.5 + rand() * 0.5 : 0.85 + rand() * 0.15;
+    g.lineWidth = 2 + rand() * 3;
+    g.beginPath();
+    g.moveTo(x0, y);
+    g.lineTo(x1, y + (rand() - 0.5) * 3);
+    g.stroke();
+  }
+  return `url(${c.toDataURL()})`;
+}
+
+const SPEAKER = '<path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/>';
+const WAVES = '<path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>';
+const CROSS = '<path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>';
 
 /** Everything on the page apart from the painting itself. */
 export class View {
@@ -32,6 +66,7 @@ export class View {
   onBoardPress: (() => void) | null = null;
 
   constructor(root: HTMLElement) {
+    document.documentElement.style.setProperty('--swatch', brushSwatch());
     this.board = el('canvas', 'board', root);
     this.board.setAttribute('aria-label', 'The painting');
     this.board.setAttribute('role', 'img');
@@ -40,15 +75,12 @@ export class View {
     this.title = el('div', 'title', root);
     const plate = el('div', 'plate', this.title);
     el('h1', '', plate, TITLE);
-    el('p', 'definition', plate, DEFINITION);
     const begin = el('button', 'begin', plate, UI.begin);
     begin.addEventListener('click', () => {
       if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
       this.onBegin?.();
     });
     this.notes = el('div', 'notes', root);
-    el('p', '', this.notes, UI.sound);
-    el('p', 'keys', this.notes, UI.keys);
     el('p', 'rotate', this.notes, UI.rotate);
 
     this.card = el('div', 'card', root);
@@ -62,7 +94,8 @@ export class View {
     this.controls = controls;
     this.finish = el('button', 'quiet finish', controls, UI.finish);
     this.finish.addEventListener('click', () => this.onFinish?.());
-    this.mute = el('button', 'quiet', controls, UI.mute);
+    this.mute = el('button', 'quiet icon', controls);
+    this.showMuted();
     this.mute.addEventListener('click', () => this.toggleMute());
 
     this.end = el('div', 'end', root);
@@ -85,8 +118,15 @@ export class View {
   private muted = false;
   private toggleMute(): void {
     this.muted = !this.muted;
-    this.mute.textContent = this.muted ? UI.unmute : UI.mute;
+    this.showMuted();
     this.onMute?.(this.muted);
+  }
+
+  private showMuted(): void {
+    const label = this.muted ? UI.unmute : UI.mute;
+    this.mute.setAttribute('aria-label', label);
+    this.mute.title = `${label} (M)`;
+    this.mute.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${SPEAKER}${this.muted ? CROSS : WAVES}</svg>`;
   }
 
   /** CSS size of the board, used to choose the painting resolution. */

@@ -28,7 +28,7 @@ Three stroke layers run: broad everywhere, then finer ones only where the scene 
 
 - EB Garamond. Gran's narration is italic; the grandchild's is upright. The same goes for the year cards.
 - Narration sits below the board on the dark ground, one line at a time, inked in word by word.
-- UI is quiet: thin-bordered text buttons, bottom right. Every string follows the `user-facing-copy` skill.
+- UI is quiet: buttons are small dabs of dark paint (a dry-brush mask drawn at load), bottom right; Begin is the one large dab. Mute is a speaker icon. The title screen shows only the title and Begin. Every string follows the `user-facing-copy` skill.
 
 ## Sound
 
