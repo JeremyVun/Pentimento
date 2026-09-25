@@ -3,7 +3,6 @@ import { MIXOLYDIAN } from '../theory';
 import { bars, hold, lines, roll, tailPad } from './common';
 
 const key = { tonic: 67, scale: MIXOLYDIAN };
-const BELL = 62;
 
 const lh = (vel: number) => ({ lo: 45, hi: 59, count: 3, vel, bassLo: 33, bassHi: 44, layer: 'lh' });
 
@@ -18,7 +17,6 @@ const intro: Section = {
       horn(w, bar, s, 0.45);
       w.arp('piano', bar, s, 'B . . . 2 . . .', lh(0.3));
     });
-    w.bell(BELL, b, 2, 3, 0.8);
   },
 };
 

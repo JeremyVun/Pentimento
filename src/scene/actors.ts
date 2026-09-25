@@ -1,5 +1,6 @@
 import type { Frame } from './draw';
 import { A, BRIDGE, FIG_BASE, WALL_Y, riverSpan } from './geometry';
+import { drawFerryBoat } from './draw';
 import { circle, clamp, ellipse, hash, lerp, mixHex, mulberry, poly, shade, smooth, withAlpha } from './util';
 
 interface PersonStyle {
@@ -170,11 +171,150 @@ const JOE_STOPS = 7;
 /** Where Joe is on the bridge, if he is on it. He crosses once, at eight, and stops to wave if he's painted. */
 export function joeOnBridge(c: Frame['cfg'], t: number, woke: number | undefined): { x: number; y: number; walkT: number; waving: boolean } | null {
   if (!c.figures.includes('joeBridge')) return null;
-  const at = c.joeAt ?? 0;
-  const walk = c.joeAt === undefined ? c.duration * 0.95 : 20;
+  const at = c.moments?.joe ?? 0;
+  const walk = c.moments?.joe === undefined ? c.duration * 0.95 : 20;
   const walkT = t - at - (woke === undefined ? 0 : Math.min(woke, JOE_STOPS));
   if (walkT < 0 || walkT > walk) return null;
   return { x: lerp(0.37, 1.12, walkT / walk), y: BRIDGE.top, walkT, waving: woke !== undefined && woke < JOE_STOPS };
+}
+
+const FERRY_CROSSING = 26;
+const FERRY_WAVES = 6;
+
+/** The ferry's x on the river. With a moment set, it waits at the far jetty, crosses once and ties up at the near one. */
+export function ferryX(c: Frame['cfg'], t: number, woke: number | undefined): { x: number; crossing: boolean } {
+  const at = c.moments?.ferry;
+  if (at === undefined) return { x: lerp(0.54, 1.04, 0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 36)), crossing: true };
+  const u = (t - at - (woke === undefined ? 0 : Math.min(woke, FERRY_WAVES))) / FERRY_CROSSING;
+  return { x: lerp(1.04, 0.54, smooth(0, 1, clamp(u))), crossing: u > 0 && u < 1 };
+}
+
+const TRAIN_CROSSING = 22;
+const TRAIN_Y = 0.452;
+
+function trainX(c: Frame['cfg'], t: number): number | null {
+  const at = c.moments?.train;
+  if (at === undefined) return null;
+  const u = (t - at) / TRAIN_CROSSING;
+  if (u < 0 || u > 1) return null;
+  return lerp(A + 0.05, -0.25, u);
+}
+
+/** The afternoon train to the city, along the foot of the far hills, leaving to the left. */
+export function drawTrain(ctx: CanvasRenderingContext2D, f: Frame): void {
+  if (!f.cfg.figures.includes('train')) return;
+  const x = trainX(f.cfg, f.t);
+  if (x === null) return;
+  const y = TRAIN_Y;
+  const cars = ['#c0392b', '#3f5d86', '#3f5d86', '#3f5d86'];
+  ctx.strokeStyle = '#4a4038';
+  ctx.lineWidth = 0.0016;
+  ctx.beginPath();
+  ctx.moveTo(x - 0.01, y + 0.001);
+  ctx.lineTo(x + 0.23, y + 0.001);
+  ctx.stroke();
+  cars.forEach((col, i) => {
+    const cx = x + i * 0.057;
+    ctx.fillStyle = col;
+    ctx.fillRect(cx, y - 0.017, i === 0 ? 0.048 : 0.052, i === 0 ? 0.015 : 0.017);
+    if (i === 0) {
+      ctx.fillRect(cx + 0.008, y - 0.028, 0.008, 0.012);
+      ctx.fillRect(cx + 0.03, y - 0.024, 0.016, 0.009);
+    } else {
+      ctx.fillStyle = '#f0e6c8';
+      for (let k = 0; k < 4; k++) ctx.fillRect(cx + 0.005 + k * 0.012, y - 0.014, 0.007, 0.005);
+    }
+  });
+  for (let k = 0; k < 6; k++) {
+    const ph = (f.t * 0.7 + k / 6) % 1;
+    circle(ctx, x + 0.012 + ph * 0.09, y - 0.034 - ph * 0.035, 0.005 + ph * 0.014, withAlpha('#f4efe6', 0.7 * (1 - ph)));
+  }
+}
+
+const BUS_CROSSING = 16;
+
+function busX(c: Frame['cfg'], t: number): number | null {
+  const at = c.moments?.bus;
+  if (at === undefined) {
+    const u = clamp((t - 4) / (c.duration * 0.85));
+    return lerp(0.2, 1.22, smooth(0, 1, u) * 0.4 + u * 0.6);
+  }
+  const u = (t - at) / BUS_CROSSING;
+  if (u < 0 || u > 1) return null;
+  return lerp(0.2, 1.3, smooth(0, 1, u) * 0.4 + u * 0.6);
+}
+
+export function busGone(c: Frame['cfg'], t: number): boolean {
+  const at = c.moments?.bus;
+  return at === undefined ? t > c.duration * 0.8 : t > at + BUS_CROSSING;
+}
+
+const ROBIN_STAYS = 30;
+
+/** The robin on the garden wall. With a moment set, it flies in, stays a while and leaves. */
+export function robinAt(c: Frame['cfg'], t: number, woke: number | undefined): { x: number; y: number } | null {
+  if (c.birds !== 'robin') return null;
+  const at = c.moments?.robin;
+  let x = 0.26;
+  let y = WALL_Y - 0.015;
+  if (at !== undefined) {
+    const s = t - at;
+    if (s < 0) return null;
+    const stays = woke === undefined ? ROBIN_STAYS : Math.max(ROBIN_STAYS, s - woke + 8);
+    if (s > stays + 1.5) return null;
+    if (s < 1.5) {
+      const u = s / 1.5;
+      x = lerp(0.02, x, u);
+      y = lerp(0.6, y, u) - Math.sin(u * Math.PI) * 0.03;
+    } else if (s > stays) {
+      const u = (s - stays) / 1.5;
+      x = lerp(x, 0.6, u);
+      y -= Math.sin(u * Math.PI * 0.5) * 0.15;
+    }
+  }
+  if (woke !== undefined) {
+    const hop = Math.floor(woke / 1.2);
+    const ph = (woke / 1.2) % 1;
+    if (hop < 4) {
+      x += (hop + ph) * 0.012;
+      y -= Math.sin(ph * Math.PI) * 0.01;
+    } else x += 0.048;
+  }
+  return { x, y };
+}
+
+export interface Spot {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+}
+
+/** Where a passing moment can be caught right now, in scene units, or null while it isn't in view. */
+export function momentSpot(c: Frame['cfg'], id: string, t: number, woke: number | undefined): Spot | null {
+  switch (id) {
+    case 'joe': {
+      const j = joeOnBridge(c, t, woke);
+      return j ? { x: j.x, y: j.y - 0.028, rx: 0.025, ry: 0.03 } : null;
+    }
+    case 'ferry': {
+      const fx = ferryX(c, t, woke);
+      return fx.crossing || (woke !== undefined && woke < FERRY_WAVES) ? { x: fx.x, y: 0.672, rx: 0.05, ry: 0.022 } : null;
+    }
+    case 'train': {
+      const x = trainX(c, t);
+      return x === null || x > A ? null : { x: x + 0.11, y: TRAIN_Y - 0.012, rx: 0.115, ry: 0.02 };
+    }
+    case 'bus': {
+      const x = busX(c, t);
+      return x === null || x > 1.2 ? null : { x, y: BRIDGE.top - 0.022, rx: 0.045, ry: 0.022 };
+    }
+    case 'robin': {
+      const r = robinAt(c, t, woke);
+      return r ? { x: r.x, y: r.y - 0.003, rx: 0.02, ry: 0.016 } : null;
+    }
+  }
+  return null;
 }
 
 /** The people, boats and birds that move, alone on white paper, for the pencil layer. */
@@ -186,7 +326,9 @@ export function drawFigures(ctx: CanvasRenderingContext2D, H: number, f: Frame):
   ctx.setTransform(H, 0, 0, H, 0, 0);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  drawTrain(ctx, f);
   drawBridgeFigures(ctx, f);
+  if (f.cfg.ferry === 'active') drawFerryBoat(ctx, f);
   drawRiverFigures(ctx, f);
   drawGardenFigures(ctx, f);
   drawBirds(ctx, f);
@@ -236,10 +378,9 @@ export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void
       }
     }
   }
-  if (c.figures.includes('bus')) {
-    const start = 4;
-    const u = clamp((f.t - start) / (c.duration * 0.85));
-    const x = lerp(0.2, 1.22, smooth(0, 1, u) * 0.4 + u * 0.6);
+  const bx = c.figures.includes('bus') ? busX(c, f.t) : null;
+  if (bx !== null) {
+    const x = bx;
     const by = BRIDGE.top - 0.004;
     const w = 0.085;
     const h = 0.036;
@@ -416,11 +557,12 @@ export function drawGardenFigures(ctx: CanvasRenderingContext2D, f: Frame): void
     pram(ctx, 0.44, 0.955, f);
   }
   if (c.figures.includes('joeBeans')) {
-    const busGone = f.t > c.duration * 0.8;
+    const gone = busGone(c, f.t);
+    const busHere = c.moments?.bus === undefined || f.t > c.moments.bus;
     const wk = f.woke.joe;
     const turned = wk !== undefined && wk < 6;
     person(ctx, 0.37, 0.93, 0.14, { coat: '#7b6a5c', legs: '#3b3f52', hair: '#8a817a', skin: '#e3b596' },
-      turned ? { wave: wk * 6 } : busGone ? {} : { wave: f.t * 5 });
+      turned ? { wave: wk * 6 } : gone || !busHere ? {} : { wave: f.t * 5 });
   }
   if (c.figures.includes('child')) {
     const wk = f.woke.child;
@@ -519,17 +661,9 @@ export function drawBirds(ctx: CanvasRenderingContext2D, f: Frame): void {
       ctx.stroke();
     }
   } else if (c.birds === 'robin') {
-    const wk = f.woke.robin;
-    let x = 0.26;
-    let y = WALL_Y - 0.015;
-    if (wk !== undefined) {
-      const hop = Math.floor(wk / 1.2);
-      const ph = (wk / 1.2) % 1;
-      if (hop < 4) {
-        x += (hop + ph) * 0.012;
-        y -= Math.sin(ph * Math.PI) * 0.01;
-      } else x += 0.048;
-    }
+    const r = robinAt(c, f.t, f.woke.robin);
+    if (!r) return;
+    const { x, y } = r;
     const bob = Math.sin(f.t * 5) > 0.95 ? 0.002 : 0;
     ellipse(ctx, x, y - bob, 0.011, 0.009, -0.2, '#7a5a42');
     ellipse(ctx, x + 0.004, y + 0.001 - bob, 0.0065, 0.006, 0, '#d65a32');

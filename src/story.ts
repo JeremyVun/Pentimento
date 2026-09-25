@@ -10,13 +10,20 @@ export interface Subject {
   line: string;
 }
 
-/** Joe crossing the bridge at eight: the lines for catching him in paint, or missing him. */
-export interface JoeMoment {
-  appears: string;
+/**
+ * Something that passes through the view once: Joe on the bridge, the bus, the robin.
+ * Pour paint on it while it's there and it stays in the painting. Its timing lives in the scene config.
+ */
+export interface Moment {
+  id: string;
+  appears?: string;
   caught: string;
-  after: string;
-  missed: string;
-  closeMissed: string;
+  /** Once it has gone, if it was caught. */
+  after?: string;
+  /** Once it has gone, if it wasn't. */
+  missed?: string;
+  /** Replaces the chapter's closing line if this moment was missed. */
+  closeMissed?: string;
 }
 
 export interface Chapter {
@@ -29,7 +36,9 @@ export interface Chapter {
   closeLow: string;
   closeFull?: string;
   brush?: number;
-  joe?: JoeMoment;
+  moments?: Moment[];
+  /** Said a few seconds after the bell strikes eight. */
+  afterBell?: string;
 }
 
 export const TITLE = 'Pentimento';
@@ -43,10 +52,16 @@ export const CHAPTERS: Chapter[] = [
     lines: [
       { at: 3, text: "This board is older than your mother, so I'd better explain it." },
       { at: 16, text: 'My aunt gave me a tin of paints for my ninth birthday. There were twelve colours, and I used up the white first.' },
-      { at: 36, text: 'This was the view from my bedroom window. There was no bridge then, so everyone crossed on the ferry.' },
+      { at: 33, text: 'This was the view from my bedroom window. There was no bridge then, so everyone crossed on the ferry.' },
+    ],
+    moments: [
+      {
+        id: 'ferry',
+        caught: 'The ferryman was called Mr Aldous. He let children ride for free if they bailed out the water.',
+        missed: "Mr Aldous took the ferry across every half hour. He never kept still long enough for me to paint him.",
+      },
     ],
     subjects: [
-      { id: 'ferry', x: 0.79, y: 0.675, rx: 0.27, ry: 0.035, line: 'The ferryman was called Mr Aldous. He let children ride for free if they bailed out the water.' },
       { id: 'fig', x: 0.17, y: 0.92, rx: 0.1, ry: 0.07, line: 'My father planted the fig tree that spring. It was a stick with two leaves, and he watered it every evening.' },
       { id: 'swallows', x: 0.95, y: 0.22, rx: 0.45, ry: 0.13, line: 'Swallows nested under our roof. I tried to paint them, but they always came out as smudges.' },
     ],
@@ -60,7 +75,15 @@ export const CHAPTERS: Chapter[] = [
     lines: [
       { at: 3, text: 'At sixteen I wanted to leave this town, and I told everyone so.' },
       { at: 17, text: 'They were building the bridge that year. It took three years, and the whole town complained about the noise.' },
-      { at: 37, text: 'I kept painting the view, even though I said I was sick of it.' },
+      { at: 32, text: 'I kept painting the view, even though I said I was sick of it.' },
+    ],
+    moments: [
+      {
+        id: 'train',
+        appears: 'The train to the city ran along the far side of the valley every afternoon.',
+        caught: 'I knew the timetable by heart. One day I was going to be on that train.',
+        missed: "I watched it go without painting it. I told myself I'd be on it the next year.",
+      },
     ],
     subjects: [
       { id: 'bridge', x: 0.76, y: 0.565, rx: 0.3, ry: 0.06, line: 'The builders came from the city. After school we sat on the bank and watched them work.' },
@@ -77,13 +100,16 @@ export const CHAPTERS: Chapter[] = [
     lines: [
       { at: 3, text: 'The bridge opened the spring I turned twenty-three. The ferry stopped the same week.' },
     ],
-    joe: {
-      appears: 'Every morning at eight, a man in a yellow coat crossed the bridge.',
-      caught: 'The first time he waved at me, I dropped my brush out of the window.',
-      after: 'His name was Joe. He worked at the post office, and he was never late.',
-      missed: "He was across the bridge before I could paint him. I didn't know his name yet.",
-      closeMissed: 'I did get him into a painting in the end. His name was Joe, and we married the next summer.',
-    },
+    moments: [
+      {
+        id: 'joe',
+        appears: 'Every morning at eight, a man in a yellow coat crossed the bridge.',
+        caught: 'The first time he waved at me, I dropped my brush out of the window.',
+        after: 'His name was Joe. He worked at the post office, and he was never late.',
+        missed: "He was across the bridge before I could paint him. I didn't know his name yet.",
+        closeMissed: 'I did get him into a painting in the end. His name was Joe, and we married the next summer.',
+      },
+    ],
     subjects: [
       { id: 'ferry', x: 0.405, y: 0.7, rx: 0.07, ry: 0.03, line: 'They dragged the ferry up onto the bank and left it there. Nettles grew through it for years.' },
       { id: 'cherry', x: 1.3, y: 0.62, rx: 0.2, ry: 0.05, line: 'The cherry trees on the far bank flowered that week. The petals floated down the river for days.' },
@@ -131,11 +157,18 @@ export const CHAPTERS: Chapter[] = [
     voice: 'gran',
     lines: [
       { at: 3, text: "June left for the city when she was eighteen. I'd wanted to leave at her age, and she actually did it." },
-      { at: 17, text: 'She caught the eight o\'clock bus over the bridge. Joe waved until it was out of sight.' },
-      { at: 38, text: 'The house was very quiet that winter. It took us a long time to get used to it.' },
+      { at: 58, text: 'The house was very quiet that winter. It took us a long time to get used to it.' },
+    ],
+    moments: [
+      {
+        id: 'bus',
+        appears: "She caught the eight o'clock bus over the bridge.",
+        caught: 'She waved from the back window of the bus. I painted her as a red dot, because that was her coat.',
+        after: 'Joe waved until the bus was out of sight.',
+        missed: "The bus was over the bridge before I'd picked up my brush. Joe waved until it was out of sight.",
+      },
     ],
     subjects: [
-      { id: 'june', x: 0.74, y: 0.52, rx: 0.4, ry: 0.035, line: 'She waved from the back window of the bus. I painted her as a red dot, because that was her coat.' },
       { id: 'joe', x: 0.42, y: 0.86, rx: 0.1, ry: 0.08, line: 'Joe took up gardening after that. He grew far more beans than two people could eat.' },
       { id: 'fig', x: 0.19, y: 0.66, rx: 0.22, ry: 0.17, line: 'The figs ripened late that year. Joe picked them and gave most of them away.' },
     ],
@@ -148,12 +181,18 @@ export const CHAPTERS: Chapter[] = [
     voice: 'gran',
     lines: [
       { at: 3, text: 'Joe died in the January. We had been married forty-eight years.' },
-      { at: 19, text: 'For a long time I still looked at the bridge at eight o\'clock.' },
-      { at: 42, text: 'I nearly didn\'t paint this one. June came home and sat with me while I did.' },
+      { at: 62, text: 'I nearly didn\'t paint this one. June came home and sat with me while I did.' },
+    ],
+    afterBell: "For a long time I still looked at the bridge at eight o'clock.",
+    moments: [
+      {
+        id: 'robin',
+        caught: "A robin came to the garden wall every morning that winter. I fed it Joe's biscuits.",
+        missed: 'A robin came to the garden wall every morning that winter.',
+      },
     ],
     subjects: [
       { id: 'bench', x: 0.375, y: 0.885, rx: 0.065, ry: 0.035, line: 'Joe built that bench the summer June was born. I still sit on it most mornings.' },
-      { id: 'robin', x: 0.28, y: 0.715, rx: 0.06, ry: 0.03, line: "A robin came to the garden wall every morning that winter. I fed it Joe's biscuits." },
       { id: 'bridge', x: 0.74, y: 0.56, rx: 0.35, ry: 0.06, line: 'The bridge was very quiet in the snow. You could hear the river moving under the ice.' },
     ],
     close: 'When the snow melted, I planted his beans. I planted far too many, the way he always did.',
@@ -203,6 +242,8 @@ export const UI = {
   rotate: 'Turn your phone sideways for a bigger painting.',
   hintMouse: 'Click to pour paint, or hold to pour more. The painting dries when the music ends.',
   hintTouch: 'Tap to pour paint, or hold to pour more. The painting dries when the music ends.',
+  catchMouse: 'Click on the ferry to paint it in before it goes.',
+  catchTouch: 'Tap the ferry to paint it in before it goes.',
   finish: 'Finish painting',
   lift: 'Hold to lift the paint and see the years underneath.',
   save: 'Save image',

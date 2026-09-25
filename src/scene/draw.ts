@@ -3,7 +3,7 @@ import { A, BRIDGE, FIG_BASE, REGION, WALL_Y, WILLOW_BASE, gardenRight, riverBan
 import {
   Pt, circle, clamp, css, ellipse, hash, hex, lerp, mixHex, mixRGB, mulberry, poly, shade, smooth, withAlpha, xAtY,
 } from './util';
-import { drawBirds, drawBridgeFigures, drawGardenFigures, drawRiverFigures, drawWeather, drawWindow } from './actors';
+import { drawBirds, drawBridgeFigures, drawGardenFigures, drawRiverFigures, drawTrain, drawWeather, drawWindow, ferryX } from './actors';
 
 export interface Frame {
   cfg: SceneConfig;
@@ -28,6 +28,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, H: number, f: Frame): v
   clouds(ctx, f);
   R(REGION.hills);
   hills(ctx, c.pal, c);
+  drawTrain(ctx, f);
   R(REGION.fields);
   farBank(ctx, c.pal, c);
   R(REGION.rightBank);
@@ -1010,16 +1011,7 @@ function ferry(ctx: CanvasRenderingContext2D, f: Frame): void {
     ctx.stroke();
     jetty(ctx, 0.43, 0.678, P);
     jetty(ctx, 1.12, 0.668, P);
-    const u = 0.5 - 0.5 * Math.cos((2 * Math.PI * f.t) / 36);
-    const x = lerp(0.54, 1.04, u);
-    const y = 0.678 + Math.sin(f.t * 1.4) * 0.0015;
-    ellipse(ctx, x, y + 0.012, 0.05, 0.006, 0, withAlpha(P.riverDark, 0.45));
-    poly(ctx, [[x - 0.048, y - 0.006], [x + 0.048, y - 0.006], [x + 0.04, y + 0.007], [x - 0.04, y + 0.007]]);
-    ctx.fillStyle = hull;
-    ctx.fill();
-    ctx.fillStyle = shade(hull, 0.25);
-    ctx.fillRect(x - 0.048, y - 0.008, 0.096, 0.003);
-    ferryman(ctx, f, x - 0.02, y - 0.006);
+    drawFerryBoat(ctx, f);
   } else {
     const x = 0.405;
     const y = 0.7;
@@ -1045,6 +1037,20 @@ function ferry(ctx: CanvasRenderingContext2D, f: Frame): void {
       }
     }
   }
+}
+
+export function drawFerryBoat(ctx: CanvasRenderingContext2D, f: Frame): void {
+  const P = f.cfg.pal;
+  const hull = f.cfg.bridge === 'building' ? '#3d74bf' : P.wood;
+  const x = ferryX(f.cfg, f.t, f.woke.ferry).x;
+  const y = 0.678 + Math.sin(f.t * 1.4) * 0.0015;
+  ellipse(ctx, x, y + 0.012, 0.05, 0.006, 0, withAlpha(P.riverDark, 0.45));
+  poly(ctx, [[x - 0.048, y - 0.006], [x + 0.048, y - 0.006], [x + 0.04, y + 0.007], [x - 0.04, y + 0.007]]);
+  ctx.fillStyle = hull;
+  ctx.fill();
+  ctx.fillStyle = shade(hull, 0.25);
+  ctx.fillRect(x - 0.048, y - 0.008, 0.096, 0.003);
+  ferryman(ctx, f, x - 0.02, y - 0.006);
 }
 
 function jetty(ctx: CanvasRenderingContext2D, x: number, y: number, P: Palette): void {

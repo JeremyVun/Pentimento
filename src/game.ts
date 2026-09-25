@@ -3,7 +3,7 @@ import { Brush, Coverage } from './brush';
 import { ASPECT, DEFAULT_LAYERS, Painter, type Dab } from './gl/painter';
 import { Narration } from './narration';
 import { SCENES, type SceneConfig } from './scene/config';
-import { drawFigures, joeOnBridge } from './scene/actors';
+import { drawFigures, momentSpot } from './scene/actors';
 import { drawScene } from './scene/draw';
 import { drawFlow } from './scene/flow';
 import { drawRegions } from './scene/regions';
@@ -17,7 +17,10 @@ const WAKE_AT = 0.42;
 const INTRO = 5.2;
 /** How fast poured paint dries while painting. Wet paint moves with the view; dry paint keeps its moment. */
 const DRY_RATE = 0.06;
-const JOE_SETS_AFTER = 3.5;
+/** Seconds after a moment is caught before the paint around it sets, holding it mid-wave. */
+const SETS_AFTER: Record<string, number> = { joe: 3.5, ferry: 2.5, train: 0.8, bus: 2, robin: 2.6 };
+
+type MomentState = 'waiting' | 'passing' | 'caught' | 'gone';
 
 const ease = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const ramp = (t: number, a: number, b: number) => ease((t - a) / (b - a));
@@ -53,9 +56,10 @@ export class Game {
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private sceneScale = 0.62;
   private figuresCanvas: HTMLCanvasElement;
-  private joe: 'waiting' | 'crossing' | 'caught' | 'gone' = 'waiting';
-  private joeCaught = false;
-  private joeSet = false;
+  private moments: Record<string, { state: MomentState; set: boolean }> = {};
+  private bellRung = false;
+  private pendingLines: { t: number; text: string }[] = [];
+  private catchHint = false;
 
   constructor(
     private painter: Painter,
@@ -92,12 +96,12 @@ export class Game {
   }
 
   get debug() {
-    const woke = this.wakeTimes.joe === undefined ? undefined : this.sceneT - this.wakeTimes.joe;
-    const joe = joeOnBridge(this.cfg, this.sceneT, woke);
-    return {
-      phase: this.phase, chapter: this.chapter?.id ?? null, t: this.phaseT, sceneT: this.sceneT, coverage: this.coverage.total(),
-      joe: this.joe, joePos: joe ? { u: joe.x / ASPECT, v: joe.y - 0.028 } : null,
-    };
+    const spots: Record<string, { state: MomentState; u?: number; v?: number }> = {};
+    for (const [id, m] of Object.entries(this.moments)) {
+      const s = momentSpot(this.cfg, id, this.sceneT, this.woke(id));
+      spots[id] = { state: m.state, u: s ? s.x / ASPECT : undefined, v: s?.y };
+    }
+    return { phase: this.phase, chapter: this.chapter?.id ?? null, t: this.phaseT, sceneT: this.sceneT, coverage: this.coverage.total(), moments: spots };
   }
 
   /** QA only: jump straight to the lift ending with whatever is on the board. */
@@ -209,9 +213,10 @@ export class Game {
     this.finishRequested = false;
     this.baked = false;
     this.closeQueued = false;
-    this.joe = 'waiting';
-    this.joeCaught = false;
-    this.joeSet = false;
+    this.moments = {};
+    for (const m of ch.moments ?? []) this.moments[m.id] = { state: 'waiting', set: false };
+    this.bellRung = false;
+    this.pendingLines = [];
     this.brush.scale = ch.brush ?? 1;
     this.living = 1;
     this.sketch = 0;
@@ -297,11 +302,12 @@ export class Game {
             }
           }
         }
-        this.updateJoe(ch, dt);
+        this.updateBell(ch, dt);
+        this.updateMoments(ch);
         if (this.brush.down) this.paintedSeconds += dt;
-        if (this.paintedSeconds > 2.5 || this.coverage.total() > 0.06) this.view.hideHint();
+        if (!this.catchHint && (this.paintedSeconds > 2.5 || this.coverage.total() > 0.06)) this.view.hideHint();
         const canFinish = this.phaseT > 25 && this.shownLines.size === ch.lines.length
-          && (!ch.joe || this.joe === 'gone');
+          && Object.values(this.moments).every((m) => m.state === 'gone');
         this.view.showFinish(canFinish);
         if (this.phaseT >= this.cfg.duration || this.finishRequested) this.enterDrying();
         break;
@@ -344,61 +350,87 @@ export class Game {
     );
   }
 
-  /** A figure stands in front of several shapes, so paint poured on Joe covers him whatever is behind. */
-  private pourOnJoe(): void {
-    if (this.joe !== 'crossing' && this.joe !== 'caught') return;
-    const woke = this.wakeTimes.joe === undefined ? undefined : this.sceneT - this.wakeTimes.joe;
-    const pos = joeOnBridge(this.cfg, this.sceneT, woke);
-    if (!pos) return;
-    const cx = pos.x;
-    const cy = pos.y - 0.028;
-    if (Math.hypot(this.brush.x * ASPECT - cx, this.brush.y - cy) > 0.06) return;
-    this.painter.pourSeed([{ x: cx / ASPECT, y: cy, r: 0.034, strength: 0.02, angle: 0, seed: this.sceneT }], true);
+  private woke(id: string): number | undefined {
+    return this.wakeTimes[id] === undefined ? undefined : this.sceneT - this.wakeTimes[id];
   }
 
-  /** Joe crosses once at eight. Paint that is still wet where he walks catches him, and he waves. */
-  private updateJoe(ch: Chapter, dt: number): void {
-    const at = this.cfg.joeAt;
-    if (!ch.joe || at === undefined) return;
-    if (this.joe === 'waiting') {
-      if (this.sceneT >= at - 0.6 && this.sceneT - dt < at - 0.6) this.audio.bell();
-      if (this.sceneT >= at) {
-        this.joe = 'crossing';
-        this.narration.push(ch.joe.appears, ch.voice);
+  /** A figure stands in front of several shapes, so paint poured on a passing moment covers it whatever is behind. */
+  private pourOnMoments(): void {
+    for (const [id, m] of Object.entries(this.moments)) {
+      if (m.state !== 'passing' && m.state !== 'caught') continue;
+      const spot = momentSpot(this.cfg, id, this.sceneT, this.woke(id));
+      if (!spot) continue;
+      const dx = (this.brush.x * ASPECT - spot.x) / (spot.rx + 0.04);
+      const dy = (this.brush.y - spot.y) / (spot.ry + 0.04);
+      if (dx * dx + dy * dy > 1) continue;
+      const n = Math.max(1, Math.round(spot.rx / spot.ry));
+      const seeds: Dab[] = [];
+      for (let k = 0; k < n; k++) {
+        const x = spot.x + (n === 1 ? 0 : (k / (n - 1) - 0.5) * 2 * (spot.rx - spot.ry));
+        seeds.push({ x: x / ASPECT, y: spot.y, r: spot.ry + 0.012, strength: 0.02, angle: 0, seed: this.sceneT + k });
       }
-      return;
+      this.painter.pourSeed(seeds, true);
     }
-    const woke = this.wakeTimes.joe === undefined ? undefined : this.sceneT - this.wakeTimes.joe;
-    const pos = joeOnBridge(this.cfg, this.sceneT, woke);
-    if (this.joe === 'crossing') {
-      if (!pos) {
-        this.joe = 'gone';
-        this.narration.push(ch.joe.missed, ch.voice);
-      } else if (this.coverage.wetness(pos.x, pos.y - 0.028, 0.025, 0.03) > 0.3) {
-        this.joe = 'caught';
-        this.joeCaught = true;
-        this.wakeTimes.joe = this.sceneT;
-        this.pulse = { x: pos.x, y: pos.y - 0.03, rx: 0.08, ry: 0.07, t: 0 };
-        this.narration.push(ch.joe.caught, ch.voice);
-        this.audio.wake(pos.x / ASPECT);
-      }
-      return;
-    }
-    if (this.joe === 'caught') {
-      if (!this.joeSet && woke !== undefined && woke >= JOE_SETS_AFTER && pos) {
-        this.joeSet = true;
-        this.painter.setPaint(pos.x, pos.y - 0.03, 0.04, 0.045);
-      }
-      if (!pos) {
-        this.joe = 'gone';
-        this.narration.push(ch.joe.after, ch.voice);
+  }
+
+  private updateBell(ch: Chapter, dt: number): void {
+    const at = this.cfg.bellAt;
+    if (at === undefined || this.bellRung || this.sceneT < at) return;
+    this.bellRung = true;
+    this.audio.bell();
+    if (ch.afterBell) this.pendingLines.push({ t: this.sceneT + 5.5 - dt, text: ch.afterBell });
+  }
+
+  /** Things pass through the view once. Paint that is wet where one is catches it, and the paint then sets around it. */
+  private updateMoments(ch: Chapter): void {
+    for (const p of this.pendingLines.filter((l) => this.sceneT >= l.t)) this.narration.push(p.text, ch.voice);
+    this.pendingLines = this.pendingLines.filter((l) => this.sceneT < l.t);
+    for (const def of ch.moments ?? []) {
+      const m = this.moments[def.id];
+      const woke = this.woke(def.id);
+      const spot = momentSpot(this.cfg, def.id, this.sceneT, woke);
+      if (m.state === 'waiting') {
+        if (!spot) continue;
+        m.state = 'passing';
+        if (def.appears) this.narration.push(def.appears, ch.voice, true);
+        if (this.chapterIndex === 0 && def.id === 'ferry') {
+          this.catchHint = true;
+          this.view.showHint(matchMedia('(pointer: coarse)').matches ? UI.catchTouch : UI.catchMouse);
+        }
+      } else if (m.state === 'passing') {
+        if (!spot) {
+          m.state = 'gone';
+          this.catchHint = false;
+          this.view.hideHint();
+          if (def.missed) this.narration.push(def.missed, ch.voice);
+        } else if (this.coverage.wetness(spot.x, spot.y, spot.rx * 0.8, spot.ry) > 0.3) {
+          m.state = 'caught';
+          this.catchHint = false;
+          this.view.hideHint();
+          this.wakeTimes[def.id] = this.sceneT;
+          this.pulse = { x: spot.x, y: spot.y, rx: spot.rx * 2.5, ry: spot.ry * 2.5, t: 0 };
+          this.narration.push(def.caught, ch.voice, true);
+          this.audio.wake(spot.x / ASPECT);
+        }
+      } else if (m.state === 'caught') {
+        if (!m.set && woke !== undefined && woke >= (SETS_AFTER[def.id] ?? 2.5) && spot) {
+          m.set = true;
+          this.painter.setPaint(spot.x, spot.y, spot.rx + 0.015, spot.ry + 0.015);
+        }
+        if (!spot) {
+          m.state = 'gone';
+          if (def.after) this.narration.push(def.after, ch.voice);
+        }
       }
     }
   }
 
   private closeLine(): string {
     const ch = this.chapter!;
-    if (ch.joe && !this.joeCaught && this.coverage.total() >= 0.15) return ch.joe.closeMissed;
+    if (this.coverage.total() >= 0.15) {
+      const missed = (ch.moments ?? []).find((m) => m.closeMissed && !this.wakeTimes[m.id]);
+      if (missed?.closeMissed) return missed.closeMissed;
+    }
     const total = this.coverage.total();
     if (total < 0.15) return ch.closeLow;
     if (ch.closeFull && this.coverage.region(0, 0.45) > 0.8) return ch.closeFull;
@@ -442,7 +474,7 @@ export class Game {
       const seeds = dabs.filter((_, i) => i % 3 === 0).map((d) => ({ ...d, r: 0.016, strength: budget }));
       if (seeds.length === 0) seeds.push({ x: this.brush.x, y: this.brush.y, r: 0.016, strength: budget, angle: 0, seed: 1 });
       this.painter.pourSeed(seeds);
-      this.pourOnJoe();
+      this.pourOnMoments();
       this.audio.brush(this.brush.x, this.brush.y, Math.max(this.brush.speed, 0.5));
     } else {
       this.pourHeld = 0;

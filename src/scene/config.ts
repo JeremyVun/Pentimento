@@ -22,7 +22,7 @@ export type Leaves = 'stick' | 'none' | 'spring' | 'summer' | 'autumn';
 export type Weather = 'rain' | 'storm' | 'snow' | 'leaves' | 'petals' | null;
 export type Figure =
   | 'father' | 'ferryman' | 'workers' | 'joeBridge' | 'joeGarden' | 'joeBeans' | 'swimmers'
-  | 'lanterns' | 'bus' | 'child' | 'june' | 'kidsBridge' | 'strollers' | 'rower';
+  | 'lanterns' | 'bus' | 'child' | 'june' | 'kidsBridge' | 'strollers' | 'rower' | 'train';
 
 export interface SceneConfig {
   pal: Palette;
@@ -53,8 +53,10 @@ export interface SceneConfig {
   wind: number;
   lightning?: boolean;
   duration: number;
-  /** Scene second the bell strikes eight and Joe starts across the bridge. */
-  joeAt?: number;
+  /** Scene second each passing moment begins (Joe's crossing, the bus, the robin...). */
+  moments?: Record<string, number>;
+  /** Scene second the church bell strikes eight. */
+  bellAt?: number;
 }
 
 const base: Palette = {
@@ -110,7 +112,7 @@ export const SCENES: Record<string, SceneConfig> = {
     clouds: { kind: 'cumulus', n: 6, y0: 0.08, y1: 0.3, speed: 0.006, scale: 1 },
     town: 0, bridge: 'none', ferry: 'active',
     fig: { size: 0.04, leaves: 'stick' },
-    figures: ['father', 'ferryman'], birds: 'swallows', wind: 0.4, duration: 80,
+    figures: ['father', 'ferryman'], birds: 'swallows', wind: 0.4, duration: 80, moments: { ferry: 40 },
   },
 
   sixteen: {
@@ -134,7 +136,7 @@ export const SCENES: Record<string, SceneConfig> = {
     clouds: { kind: 'streaky', n: 8, y0: 0.06, y1: 0.3, speed: 0.008, scale: 1 },
     town: 0.2, bridge: 'building', ferry: 'active',
     fig: { size: 0.24, leaves: 'autumn' },
-    figures: ['workers', 'ferryman'], birds: 'gulls', weather: 'leaves', wind: 0.8, duration: 80,
+    figures: ['workers', 'ferryman', 'train'], birds: 'gulls', weather: 'leaves', wind: 0.8, duration: 80, moments: { train: 44 },
   },
 
   twentythree: {
@@ -156,7 +158,7 @@ export const SCENES: Record<string, SceneConfig> = {
     clouds: { kind: 'rain', n: 7, y0: 0.05, y1: 0.3, speed: 0.007, scale: 1.1 },
     town: 0.4, bridge: 'built', lamps: 'off', ferry: 'moored',
     fig: { size: 0.36, leaves: 'spring' },
-    figures: ['joeBridge'], weather: 'rain', cherry: true, wind: 0.3, duration: 85, joeAt: 34,
+    figures: ['joeBridge'], weather: 'rain', cherry: true, wind: 0.3, duration: 85, moments: { joe: 34 }, bellAt: 33.4,
   },
 
   thirtyone: {
@@ -229,7 +231,7 @@ export const SCENES: Record<string, SceneConfig> = {
     town: 1, bridge: 'built', lamps: 'off', ferry: 'none',
     fig: { size: 0.7, leaves: 'autumn', fruit: true },
     bench: true, beans: 'green',
-    figures: ['bus', 'joeBeans'], weather: 'leaves', mist: true, wind: 0.3, duration: 80,
+    figures: ['bus', 'joeBeans'], weather: 'leaves', mist: true, wind: 0.3, duration: 80, moments: { bus: 24 }, bellAt: 23.4,
   },
 
   seventytwo: {
@@ -255,7 +257,7 @@ export const SCENES: Record<string, SceneConfig> = {
     town: 1, townLit: true, snow: true, ice: true, bridge: 'built', lamps: 'dawn', ferry: 'none',
     fig: { size: 0.78, leaves: 'none', snow: true, broken: true },
     bench: true, beans: 'bare',
-    figures: [], birds: 'robin', weather: 'snow', wind: 0.15, duration: 95,
+    figures: [], birds: 'robin', weather: 'snow', wind: 0.15, duration: 95, moments: { robin: 40 }, bellAt: 26,
   },
 
   eightysix: {

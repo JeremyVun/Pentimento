@@ -14,8 +14,16 @@ export class Narration {
 
   constructor(private root: HTMLElement) {}
 
-  push(text: string, voice: Voice): void {
-    this.queue.push({ text, voice });
+  /** An urgent line is about something happening now: it goes next, and cuts short a line that has been up a while. */
+  push(text: string, voice: Voice, urgent = false): void {
+    if (!urgent) {
+      this.queue.push({ text, voice });
+      return;
+    }
+    this.queue.unshift({ text, voice });
+    const c = this.current;
+    if (c && c.t > 1.5) c.hold = Math.min(c.hold, c.t);
+    this.gap = Math.min(this.gap, 0.2);
   }
 
   get busy(): boolean {

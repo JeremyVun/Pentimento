@@ -4,7 +4,6 @@ import { bars, lines, roll } from './common';
 
 const key = { tonic: 69, scale: MINOR };
 const major = { tonic: 69, scale: MAJOR };
-const BELL = 62;
 
 /** A single low note held under the bar, and sometimes a soft dyad on beat three. */
 function lh(w: Writer, bar: number, s: Span[], dyad: boolean, vel = 0.3): void {
@@ -21,7 +20,6 @@ const intro: Section = {
     w.prog(b, 'Am');
     w.prog(b + 1, 'Am');
     lh(w, b + 2, w.prog(b + 2, 'Am'), true, 0.28);
-    w.bell(BELL, b, 1, 2, 0.8);
     w.amb('robin', w.at(b + 1, 3), 0.7, 0.45);
   },
 };
