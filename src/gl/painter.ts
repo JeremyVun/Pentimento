@@ -41,6 +41,9 @@ export interface CompositeParams {
   pulseAmt?: number;
   /** How strongly the moving figures show in pencil where the paint isn't alive. */
   figures?: number;
+  /** 0 leaves only their colours, blurred by `figureBlur`. */
+  figureLines?: number;
+  figureBlur?: number;
 }
 
 export interface Dab {
@@ -483,7 +486,9 @@ export class Painter {
       .f('uPulse', ...(c.pulse ?? [0, 0, 1, 1]))
       .f('uPulseAmt', c.pulseAmt ?? 0)
       .tex('uFigures', 8, this.figuresTex)
-      .f('uFigAmt', c.figures ?? 0);
+      .f('uFigAmt', c.figures ?? 0)
+      .f('uFigLines', c.figureLines ?? 1)
+      .f('uFigBlur', c.figureBlur ?? 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

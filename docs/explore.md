@@ -45,6 +45,36 @@ Core loop to test, "wet paint lives, dry paint keeps the moment":
 - Things happen at moments across the music, so there is a reason to stay for the whole sitting.
 - Lines come from what you paint and catch, not a timer.
 
-## Prototypes and findings
+## Prototype 1: moments (built 2026-09-25)
 
-(Filled in as each one is tried.)
+Play it with the worktree's dev server (`npx vite --port 5327` in `/private/tmp/pentimento-explore`). `?from=<chapter id>` starts at that chapter with every earlier year painted in full; `?speed=` still works. `tools/moment.mjs` plays one chapter and tries to catch each moment.
+
+What changed:
+- Poured paint stays wet for roughly 20 to 60 seconds (`DRY_RATE` in `src/game.ts`). While wet it moves with the view; as it dries it holds the moment it dried in (`HOLD_FS`). Pouring again wets it.
+- The pencil layer now shows the moving people, boats and birds, drawn fresh every frame (`drawFigures`). Where the paint isn't alive they show as pale pencil silhouettes, and reds and yellows show in colour: Joe's coat, June's coat, the robin, the train.
+- Each chapter has something that passes once (`moments` in `src/story.ts`, timings in `src/scene/config.ts`, positions in `momentSpot`). Pour on it while it's there and it's caught: it reacts, its line plays, and the paint around it sets a few seconds later so the painting keeps it. Missed moments get their own line.
+- The bell is rung by the game (`audio.bell()`), not written into the scores, so eight o'clock happens mid-sitting.
+- Finish painting only appears once every moment has passed.
+
+| Chapter | What passes | Notes |
+|---|---|---|
+| Nine | The ferry crosses once | Teaches catching, with a one-off hint |
+| Sixteen | The afternoon train to the city, along the far hills, leaving | Her wish to leave |
+| Twenty-three | Joe crosses at eight | Caught, he waves and stays in the painting |
+| Thirty-one | Children jump off the bridge | The one chapter with limited paint (9 s of pouring); she stops when it runs out |
+| Forty-four | Her father under the fig tree, in pencil only | A ghost: painting him shows the empty place |
+| Forty-nine | The eight o'clock bus, June's red coat in the back window | |
+| Seventy-two | Pencil Joe crosses at eight, then a robin comes to the wall | A ghost: painting him shows an empty bridge |
+| Eighty-six | The grandchild playing in the garden | No pencil at all, only blurred colour |
+| Twenty years later | The afternoon train arrives, then children jump | The grandchild comes home on the train Gran wanted to leave on |
+
+Open questions for Jeremy:
+- Does catching give the sitting enough shape, or does it need more than one or two moments per chapter?
+- Does the drying (paint going still) read, and is it welcome, or does it take away the moving painting he liked?
+- The ghosts at forty-four and seventy-two: too much, or the right weight?
+- Figures are small at the board's scale. Joe's ghost in the snow is hard to spot apart from his yellow coat.
+
+Not yet tried:
+- Her age in how the paint behaves at nine (splashy, spills over edges) and forty-four (watery, bleeds).
+- The opening line ("This board is older than your mother") still assumes the player knows who "you" is.
+- More of the leaving theme in the grandchild's words (for example, that she lived far away before coming back). Needs Jeremy's say, since it adds facts to the story.

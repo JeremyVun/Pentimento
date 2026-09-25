@@ -22,6 +22,7 @@ export interface AudioEngine {
   setMuted(muted: boolean): void;
   readonly muted: boolean;
   liftLayer(id: ScoreId | null): void;
+  bell(): void;
 }
 
 export function createAudioEngine(): AudioEngine;
@@ -36,6 +37,7 @@ Semantics:
 - `wake(x)` means a thing in the view woke up because the player painted it. It plays a small flourish in key, panned by `x`.
 - `duck(on)` is true while a narration line is on screen. Music drops about 3 dB. Ambience does not.
 - `setMuted` fades the master in or out over about 0.3 s. `muted` reads it back.
+- `bell()` strikes the church bell eight times, three beats apart, starting on the current score's next beat.
 - `liftLayer(id)` is used only in the lift ending. Brush notes switch to that chapter's scale and timbre. `null` returns to the lift score's own.
 
 Offline rendering: `src/audio/offline.ts` exports `renderOffline(id: ScoreId, durationSec: number, sampleRate?: number, opts?: RenderOptions): Promise<AudioBuffer>`. It renders a score into an `OfflineAudioContext` with the same code the live engine uses. `durationSec` is the length of audio to render; a chapter is fitted to its length in the table below unless `opts.chapterSec` says otherwise, so `renderOffline('nine', 88)` gives the 80 s chapter and 8 s of its tail.
@@ -58,7 +60,7 @@ One recurring motif, called the window theme, runs through the whole game. It is
 
 The river is in every scene, so a soft water bed plays under every score, and its character changes with the chapter.
 
-A distant church bell strikes eight near the start of `twentythree`, `fortynine` and `seventytwo`. Those are the mornings Joe first crosses the bridge, June leaves on the eight o'clock bus, and the first winter without Joe.
+A distant church bell strikes eight in `twentythree`, `fortynine` and `seventytwo`. Those are the mornings Joe first crosses the bridge, June leaves on the eight o'clock bus, and the first winter without Joe. The game rings it with `bell()` at the moment it chooses, so the scores don't contain it.
 
 | Score | Length | Scene | Music |
 |---|---|---|---|

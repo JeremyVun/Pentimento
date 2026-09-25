@@ -449,6 +449,8 @@ uniform vec4 uPulse;
 uniform float uPulseAmt;
 uniform sampler2D uFigures;
 uniform float uFigAmt;
+uniform float uFigLines;
+uniform float uFigBlur;
 out vec4 outColor;
 
 float edgeOf(sampler2D s, vec2 uv) {
@@ -565,9 +567,14 @@ void main() {
     line *= 0.6 + 0.4 * tooth;
     float away = (1.0 - alive) * uFigAmt;
     vec3 fc = texture(uFigures, uv).rgb;
+    if (uFigBlur > 0.0) {
+      vec2 b = vec2(uFigBlur / uAspect, uFigBlur);
+      fc = (fc + texture(uFigures, uv + b).rgb + texture(uFigures, uv - b).rgb
+        + texture(uFigures, uv + vec2(b.x, -b.y)).rgb + texture(uFigures, uv + vec2(-b.x, b.y)).rgb) / 5.0;
+    }
     float body = smoothstep(0.04, 0.2, length(vec3(1.0) - fc));
-    col = mix(col, uPaperCol * 0.96, body * away * 0.45);
-    col = mix(col, graphiteOver(col), clamp(line * away, 0.0, 1.0) * 0.8);
+    col = mix(col, uPaperCol * 0.96, body * away * 0.45 * uFigLines);
+    col = mix(col, graphiteOver(col), clamp(line * away, 0.0, 1.0) * 0.8 * uFigLines);
     vec3 fh = rgb2hsv(fc);
     float hd = min(abs(fh.x - 0.07), 1.0 - abs(fh.x - 0.07));
     float warm = smoothstep(0.55, 0.75, fh.y) * smoothstep(0.09, 0.065, hd);

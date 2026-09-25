@@ -169,10 +169,11 @@ const JOE: PersonStyle = { coat: '#f0bf2e', legs: '#3b3f52', hair: '#3a2c26', sk
 const JOE_STOPS = 7;
 
 /** Where Joe is on the bridge, if he is on it. He crosses once, at eight, and stops to wave if he's painted. */
-export function joeOnBridge(c: Frame['cfg'], t: number, woke: number | undefined): { x: number; y: number; walkT: number; waving: boolean } | null {
-  if (!c.figures.includes('joeBridge')) return null;
-  const at = c.moments?.joe ?? 0;
-  const walk = c.moments?.joe === undefined ? c.duration * 0.95 : 20;
+export function joeOnBridge(c: Frame['cfg'], t: number, woke: number | undefined, ghost = false): { x: number; y: number; walkT: number; waving: boolean } | null {
+  if (!c.figures.includes(ghost ? 'joeGhost' : 'joeBridge')) return null;
+  if (ghost && woke !== undefined) return null;
+  const at = c.moments?.[ghost ? 'joeGhost' : 'joe'] ?? 0;
+  const walk = c.moments?.joe === undefined && !ghost ? c.duration * 0.95 : 20;
   const walkT = t - at - (woke === undefined ? 0 : Math.min(woke, JOE_STOPS));
   if (walkT < 0 || walkT > walk) return null;
   return { x: lerp(0.37, 1.12, walkT / walk), y: BRIDGE.top, walkT, waving: woke !== undefined && woke < JOE_STOPS };
@@ -197,7 +198,7 @@ function trainX(c: Frame['cfg'], t: number): number | null {
   if (at === undefined) return null;
   const u = (t - at) / TRAIN_CROSSING;
   if (u < 0 || u > 1) return null;
-  return lerp(A + 0.05, -0.25, u);
+  return c.trainArrives ? lerp(-0.25, A + 0.05, u) : lerp(A + 0.05, -0.25, u);
 }
 
 /** The afternoon train to the city, along the foot of the far hills, leaving to the left. */
@@ -213,21 +214,23 @@ export function drawTrain(ctx: CanvasRenderingContext2D, f: Frame): void {
   ctx.moveTo(x - 0.01, y + 0.001);
   ctx.lineTo(x + 0.23, y + 0.001);
   ctx.stroke();
+  const back = f.cfg.trainArrives;
   cars.forEach((col, i) => {
-    const cx = x + i * 0.057;
+    const cx = back ? x + (3 - i) * 0.057 + (i === 0 ? 0.004 : 0) : x + i * 0.057;
     ctx.fillStyle = col;
     ctx.fillRect(cx, y - 0.017, i === 0 ? 0.048 : 0.052, i === 0 ? 0.015 : 0.017);
     if (i === 0) {
-      ctx.fillRect(cx + 0.008, y - 0.028, 0.008, 0.012);
-      ctx.fillRect(cx + 0.03, y - 0.024, 0.016, 0.009);
+      ctx.fillRect(cx + (back ? 0.032 : 0.008), y - 0.028, 0.008, 0.012);
+      ctx.fillRect(cx + (back ? 0.002 : 0.03), y - 0.024, 0.016, 0.009);
     } else {
       ctx.fillStyle = '#f0e6c8';
       for (let k = 0; k < 4; k++) ctx.fillRect(cx + 0.005 + k * 0.012, y - 0.014, 0.007, 0.005);
     }
   });
+  const sx = back ? x + 3 * 0.057 + 0.04 : x + 0.012;
   for (let k = 0; k < 6; k++) {
     const ph = (f.t * 0.7 + k / 6) % 1;
-    circle(ctx, x + 0.012 + ph * 0.09, y - 0.034 - ph * 0.035, 0.005 + ph * 0.014, withAlpha('#f4efe6', 0.7 * (1 - ph)));
+    circle(ctx, sx + ph * 0.09 * (back ? -1 : 1), y - 0.034 - ph * 0.035, 0.005 + ph * 0.014, withAlpha('#f4efe6', 0.7 * (1 - ph)));
   }
 }
 
@@ -313,8 +316,63 @@ export function momentSpot(c: Frame['cfg'], id: string, t: number, woke: number 
       const r = robinAt(c, t, woke);
       return r ? { x: r.x, y: r.y - 0.003, rx: 0.02, ry: 0.016 } : null;
     }
+    case 'joeGhost': {
+      const j = joeOnBridge(c, t, woke, true);
+      return j ? { x: j.x, y: j.y - 0.028, rx: 0.025, ry: 0.03 } : null;
+    }
+    case 'father': {
+      const d = fatherGhostAt(c, t, woke);
+      return d ? { x: d.x, y: d.y - 0.055, rx: 0.03, ry: 0.06 } : null;
+    }
+    case 'kids': {
+      const j = kidsJumpT(c, t, woke);
+      if (j === undefined) return t >= (c.moments?.kids ?? 0) ? { x: 0.91, y: BRIDGE.top - 0.026, rx: 0.05, ry: 0.022 } : null;
+      if (j > 1.4) return null;
+      const p = kidJump(j);
+      return { x: p.x, y: p.y - 0.014, rx: 0.02, ry: 0.022 };
+    }
+    case 'child': {
+      const k = childAt(c, t);
+      return k ? { x: k.x, y: k.y - 0.038, rx: 0.03, ry: 0.045 } : null;
+    }
   }
   return null;
+}
+
+const KIDS_WAIT = 10;
+
+/** Seconds since the middle child jumped off the bridge: when painted, or after a while if not. */
+function kidsJumpT(c: Frame['cfg'], t: number, woke: number | undefined): number | undefined {
+  if (woke !== undefined) return woke;
+  const at = c.moments?.kids;
+  if (at === undefined || t < at + KIDS_WAIT) return undefined;
+  return t - at - KIDS_WAIT;
+}
+
+function kidJump(wk: number): { x: number; y: number } {
+  const u = wk / 1.4;
+  return { x: 0.91 + u * 0.03, y: BRIDGE.top - 0.012 - Math.sin(u * Math.PI) * 0.03 + u * u * 0.09 };
+}
+
+/** The grandchild in the garden: under the fig tree, or with a moment set, out to play and back in. */
+function childAt(c: Frame['cfg'], t: number): { x: number; y: number } | null {
+  if (!c.figures.includes('child')) return null;
+  const [fx, fy] = FIG_BASE;
+  const at = c.moments?.child;
+  if (at === undefined) return { x: fx + 0.07, y: fy };
+  const s = t - at;
+  if (s < 0 || s > 40) return null;
+  return { x: fx + 0.07 + Math.sin(s * 0.35) * 0.12 + s * 0.004, y: fy - 0.01 + Math.sin(s * 0.6) * 0.012 };
+}
+
+const FATHER_STAYS = 14;
+
+/** Her father under the fig tree after supper, as she half expects to see him. Painting him shows he isn't there. */
+function fatherGhostAt(c: Frame['cfg'], t: number, woke: number | undefined): { x: number; y: number } | null {
+  if (!c.figures.includes('fatherGhost') || woke !== undefined) return null;
+  const at = c.moments?.father;
+  if (at === undefined || t < at || t > at + FATHER_STAYS) return null;
+  return { x: FIG_BASE[0] + 0.06, y: FIG_BASE[1] - 0.02 };
 }
 
 /** The people, boats and birds that move, alone on white paper, for the pencil layer. */
@@ -326,6 +384,7 @@ export function drawFigures(ctx: CanvasRenderingContext2D, H: number, f: Frame):
   ctx.setTransform(H, 0, 0, H, 0, 0);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  f = { ...f, ghosts: true };
   drawTrain(ctx, f);
   drawBridgeFigures(ctx, f);
   if (f.cfg.ferry === 'active') drawFerryBoat(ctx, f);
@@ -338,6 +397,8 @@ export function drawFigures(ctx: CanvasRenderingContext2D, H: number, f: Frame):
 export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void {
   const c = f.cfg;
   const y = BRIDGE.top + 0.002;
+  const ghost = f.ghosts ? joeOnBridge(c, f.t, f.woke.joeGhost, true) : null;
+  if (ghost) person(ctx, ghost.x, y, 0.054, JOE, { walk: ghost.walkT * 6 });
   const joe = joeOnBridge(c, f.t, f.woke.joe);
   if (joe) {
     const w = f.woke.joe;
@@ -409,8 +470,8 @@ export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void
       }
     }
   }
-  if (c.figures.includes('kidsBridge')) {
-    const wk = f.woke.kids;
+  if (c.figures.includes('kidsBridge') && (c.moments?.kids === undefined || f.t >= c.moments.kids)) {
+    const wk = kidsJumpT(c, f.t, f.woke.kids);
     const kids: [number, string][] = [[0.875, '#e2574c'], [0.91, '#4a8fd0'], [0.945, '#f2c94c']];
     kids.forEach(([x, col], i) => {
       if (i === 1 && wk !== undefined) {
@@ -469,7 +530,7 @@ export function drawRiverFigures(ctx: CanvasRenderingContext2D, f: Frame): void 
         ctx.stroke();
       }
     });
-    const wk = f.woke.kids;
+    const wk = kidsJumpT(c, f.t, f.woke.kids);
     if (wk !== undefined && wk > 1.3 && wk < 5 && !f.sketch) {
       const u = (wk - 1.3) / 3.7;
       ctx.strokeStyle = withAlpha(P.riverLight, 0.9 * (1 - u));
@@ -564,13 +625,16 @@ export function drawGardenFigures(ctx: CanvasRenderingContext2D, f: Frame): void
     person(ctx, 0.37, 0.93, 0.14, { coat: '#7b6a5c', legs: '#3b3f52', hair: '#8a817a', skin: '#e3b596' },
       turned ? { wave: wk * 6 } : gone || !busHere ? {} : { wave: f.t * 5 });
   }
-  if (c.figures.includes('child')) {
+  const kid = childAt(c, f.t);
+  if (kid) {
     const wk = f.woke.child;
     const waving = wk !== undefined && wk < 7;
     const bob = f.sketch ? 0 : Math.abs(Math.sin(f.t * 2.5)) * 0.004;
-    person(ctx, fx + 0.07, fy - bob, 0.075, { coat: '#f2c94c', legs: '#4a7ab8', hair: '#6a4a36', skin: '#eab99a', child: true },
+    person(ctx, kid.x, kid.y - bob, 0.075, { coat: '#f2c94c', legs: '#4a7ab8', hair: '#6a4a36', skin: '#eab99a', child: true },
       waving ? { wave: wk * 8, bothArms: true } : { armUp: 0.8 });
   }
+  const dad = f.ghosts ? fatherGhostAt(c, f.t, f.woke.father) : null;
+  if (dad) person(ctx, dad.x, dad.y, 0.11, { coat: '#eee8da', legs: '#4a5a7a', hair: '#8a8078', skin: '#e0ae8e' }, {});
   if (c.figures.includes('june')) {
     person(ctx, 0.46, 0.94, 0.15, { coat: '#d6402f', legs: '#3b3f52', hair: '#4a3428', skin: '#e3b596', long: true }, {});
   }

@@ -24,6 +24,8 @@ export interface Moment {
   missed?: string;
   /** Replaces the chapter's closing line if this moment was missed. */
   closeMissed?: string;
+  /** Someone she expects to see who isn't there: painting them shows the empty place. */
+  ghost?: boolean;
 }
 
 export interface Chapter {
@@ -37,8 +39,8 @@ export interface Chapter {
   closeFull?: string;
   brush?: number;
   moments?: Moment[];
-  /** Said a few seconds after the bell strikes eight. */
-  afterBell?: string;
+  /** Seconds of pouring she has time for, when that's short. */
+  paint?: number;
 }
 
 export const TITLE = 'Pentimento';
@@ -123,12 +125,19 @@ export const CHAPTERS: Chapter[] = [
     voice: 'gran',
     lines: [
       { at: 3, text: 'Our daughter June was born in May. That summer the washing line was never empty.' },
-      { at: 16, text: 'I nearly didn\'t paint that year. I did this one in twenty minutes while she slept.' },
+      { at: 11, text: 'I nearly didn\'t paint that year. I did this one in twenty minutes while she slept.' },
+    ],
+    paint: 9,
+    moments: [
+      {
+        id: 'kids',
+        caught: "Children jumped off the bridge into the river, which wasn't allowed. I'd done it too, once.",
+        missed: "Children jumped off the bridge into the river, which wasn't allowed.",
+      },
     ],
     subjects: [
       { id: 'washing', x: 0.26, y: 0.83, rx: 0.22, ry: 0.06, line: 'Joe hung the washing out every morning before work. He always pegged the socks in pairs.' },
       { id: 'fig', x: 0.2, y: 0.68, rx: 0.2, ry: 0.14, line: 'The fig tree grew its first figs that summer. My father ate the first one standing under the tree.' },
-      { id: 'kids', x: 0.92, y: 0.6, rx: 0.12, ry: 0.07, line: "Children jumped off the bridge into the river, which wasn't allowed. I'd done it too, once." },
     ],
     close: "She woke up before I'd finished the sky.",
     closeLow: "She woke up before I'd painted much at all.",
@@ -146,7 +155,14 @@ export const CHAPTERS: Chapter[] = [
     subjects: [
       { id: 'lanterns', x: 0.74, y: 0.53, rx: 0.33, ry: 0.04, line: 'The water came within a foot of the arches. Half the town stood on the bridge all night to watch.' },
       { id: 'kitchen', x: 0.2, y: 0.95, rx: 0.17, ry: 0.07, line: "June was thirteen. She sat up with me and didn't say much, and that helped." },
-      { id: 'fig', x: 0.2, y: 0.7, rx: 0.18, ry: 0.16, line: 'My father used to sit under the fig tree after supper. I kept expecting to see him there.' },
+    ],
+    moments: [
+      {
+        id: 'father',
+        ghost: true,
+        caught: 'My father used to stand under the fig tree after supper. I kept expecting to see him there.',
+        missed: 'My father used to stand under the fig tree after supper. I kept expecting to see him there.',
+      },
     ],
     close: 'The flood broke a branch off his fig tree. In the spring, it grew new leaves around the break.',
     closeLow: "I couldn't paint much that winter. I've left it the way it was.",
@@ -183,8 +199,13 @@ export const CHAPTERS: Chapter[] = [
       { at: 3, text: 'Joe died in the January. We had been married forty-eight years.' },
       { at: 62, text: 'I nearly didn\'t paint this one. June came home and sat with me while I did.' },
     ],
-    afterBell: "For a long time I still looked at the bridge at eight o'clock.",
     moments: [
+      {
+        id: 'joeGhost',
+        ghost: true,
+        caught: "For a long time I still looked at the bridge at eight o'clock.",
+        missed: "For a long time I still looked at the bridge at eight o'clock.",
+      },
       {
         id: 'robin',
         caught: "A robin came to the garden wall every morning that winter. I fed it Joe's biscuits.",
@@ -205,11 +226,16 @@ export const CHAPTERS: Chapter[] = [
     brush: 1.5,
     lines: [
       { at: 3, text: 'My eyes went the way my mother\'s did. Now I see colours and not much else.' },
-      { at: 17, text: "I don't go out much any more, so this time I painted the window as well." },
-      { at: 37, text: 'You were four that spring. You spent the whole visit under the fig tree.' },
+      { at: 13, text: "I don't go out much any more, so this time I painted the window as well." },
+      { at: 21, text: 'You were four that spring. You spent the whole visit under the fig tree.' },
+    ],
+    moments: [
+      {
+        id: 'child',
+        caught: 'You asked me why the fig tree had no flowers. I told you the flowers are inside the figs, which is true.',
+      },
     ],
     subjects: [
-      { id: 'child', x: 0.26, y: 0.92, rx: 0.08, ry: 0.07, line: 'You asked me why the fig tree had no flowers. I told you the flowers are inside the figs, which is true.' },
       { id: 'tulips', x: 1.22, y: 0.79, rx: 0.07, ry: 0.1, line: "June brings me tulips. She thinks I can't tell they're from the supermarket." },
       { id: 'bridge', x: 0.74, y: 0.56, rx: 0.35, ry: 0.06, line: "I can't see the bridge any more. I know where it is, so I painted it anyway." },
     ],
@@ -228,7 +254,18 @@ export const CHAPTERS: Chapter[] = [
     subjects: [
       { id: 'fig', x: 0.2, y: 0.62, rx: 0.25, ry: 0.2, line: "The fig tree is enormous now. I still haven't seen a fig flower." },
       { id: 'swallows', x: 0.95, y: 0.22, rx: 0.45, ry: 0.13, line: 'Swallows still nest under the roof. Gran could never paint them, and neither can I.' },
-      { id: 'kids', x: 0.92, y: 0.6, rx: 0.12, ry: 0.07, line: "Children still jump off the bridge. It still isn't allowed." },
+    ],
+    moments: [
+      {
+        id: 'train',
+        appears: 'I came home on the afternoon train, the one Gran used to watch.',
+        caught: "She wanted to be on it when she was sixteen. I've been on it more times than I can count.",
+        missed: 'Gran wanted to be on that train when she was sixteen. She never did get on it.',
+      },
+      {
+        id: 'kids',
+        caught: "Children still jump off the bridge. It still isn't allowed.",
+      },
     ],
     close: "I'll paint it again next summer.",
     closeLow: "I haven't painted much yet. I'll do more next summer.",
