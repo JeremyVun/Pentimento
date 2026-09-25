@@ -8,6 +8,12 @@ export const ASPECT = 1.6;
 export const MAX_LAYERS = 10;
 /** Spread passes a second: enough that paint keeps up with the pour and stops soon after the button is let go. */
 const SPREAD_PASSES = 360;
+/** Most spread passes in one frame: enough to keep the spread rate down to 20 fps. */
+const MAX_SPREAD_PASSES = 18;
+/** Least time between drying steps. A smaller step rounds away in a half-float target, so faster displays dry every second or third frame. */
+const DRY_STEP = 0.015;
+/** In an 8-bit target each drying step takes off at least 4%, as anything smaller rounds away. */
+const DRY_STEP_8BIT = 0.04;
 export const PAPER_RGB: [number, number, number] = [0.953, 0.925, 0.868];
 
 export interface StrokeLayer {
@@ -96,6 +102,18 @@ export const DEFAULT_LAYERS: StrokeLayer[] = [
   { count: 9000, length: 12, width: 4.5, detail: 0.11, life: 4.5, drift: 0.008, opacity: 0.95 },
 ];
 
+/** Whether paint can be kept in half-float targets, which hold the slow drying that 8 bits rounds away. */
+function floatTargets(gl: GL): boolean {
+  if (!gl.getExtension('EXT_color_buffer_float') && !gl.getExtension('EXT_color_buffer_half_float')) return false;
+  const t = createTarget(gl, 4, 4, true, true);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
+  const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(t.fbo);
+  gl.deleteTexture(t.tex);
+  return ok;
+}
+
 export class Painter {
   readonly gl: GL;
   readonly w: number;
@@ -138,6 +156,9 @@ export class Painter {
   private pDown: Program;
   private spreadSet = 0;
   private spreadDue = 0;
+  private floatPaint: boolean;
+  private dryDue = 0;
+  private settleDue = 0;
   readonly coverageW = 160;
   readonly coverageH = 100;
   private coverageBytes = new Uint8Array(160 * 100 * 4);
@@ -184,7 +205,8 @@ export class Painter {
     gl.bindVertexArray(null);
 
     const { w, h } = this;
-    const half = !!gl.getExtension('EXT_color_buffer_float');
+    const half = floatTargets(gl);
+    this.floatPaint = half;
     this.paper = createTarget(gl, w, h);
     this.living = createTarget(gl, w, h);
     this.held = [createTarget(gl, w, h), createTarget(gl, w, h)];
@@ -442,9 +464,17 @@ export class Painter {
     gl.disable(gl.BLEND);
   }
 
+  private dryStep(rate: number): number {
+    return this.floatPaint ? DRY_STEP : Math.max(DRY_STEP, DRY_STEP_8BIT / rate);
+  }
+
   dryMask(dt: number, rate = 0.55): void {
-    this.decay(this.mask, 1, Math.exp(-dt * rate));
-    this.decay(this.pour[this.pourIdx], 1, Math.exp(-dt * rate), Math.exp(-dt * 0.8));
+    this.dryDue += dt;
+    if (this.dryDue < this.dryStep(rate)) return;
+    const t = this.dryDue;
+    this.dryDue = 0;
+    this.decay(this.mask, 1, Math.exp(-t * rate));
+    this.decay(this.pour[this.pourIdx], 1, Math.exp(-t * rate), Math.exp(-t * 0.8));
   }
 
   /** Holds the paint inside an ellipse (scene units, y down) at what the view shows now, however wet it still is. */
@@ -493,7 +523,7 @@ export class Painter {
   /** Lets poured paint flow on through its region. */
   pourSpread(dt: number, seed: number): void {
     const gl = this.gl;
-    this.spreadDue = Math.min(8, this.spreadDue + dt * SPREAD_PASSES);
+    this.spreadDue = Math.min(MAX_SPREAD_PASSES, this.spreadDue + dt * SPREAD_PASSES);
     const passes = Math.floor(this.spreadDue);
     this.spreadDue -= passes;
     gl.bindVertexArray(this.emptyVao);
@@ -527,7 +557,11 @@ export class Painter {
   }
 
   settleLift(dt: number): void {
-    this.decay(this.lift, Math.exp(-dt * 0.06), 1);
+    this.settleDue += dt;
+    if (this.settleDue < this.dryStep(0.06)) return;
+    const t = this.settleDue;
+    this.settleDue = 0;
+    this.decay(this.lift, Math.exp(-t * 0.06), 1);
   }
 
   private compositeInto(target: Target | null, c: CompositeParams, bake: boolean): void {
