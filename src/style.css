@@ -126,15 +126,27 @@ button {
   text-align: center;
   pointer-events: none;
 }
+.narration { overflow: visible; }
 .narration .line {
   position: absolute;
   margin: 0;
-  padding: 0 4%;
-  max-width: 44em;
-  font-size: clamp(17px, calc(var(--board-h) * 0.034), 30px);
-  line-height: 1.4;
-  color: var(--light);
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 46%;
+  padding: 0.55em 1.1em 0.6em;
+  font-size: clamp(16px, calc(var(--board-h) * 0.032), 28px);
+  line-height: 1.38;
+  color: var(--ink);
+  isolation: isolate;
   transition: opacity 0.9s ease, filter 0.9s ease;
+}
+.narration .line::before {
+  content: '';
+  position: absolute;
+  inset: -12% -5%;
+  background: radial-gradient(ellipse at center, rgba(248, 241, 227, 0.95) 0%, rgba(248, 241, 227, 0.88) 55%, rgba(248, 241, 227, 0) 72%);
+  filter: blur(3px);
+  z-index: -1;
 }
 .narration .line.gran { font-style: italic; }
 .narration .line.grandchild { font-style: normal; }

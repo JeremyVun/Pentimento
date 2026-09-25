@@ -450,6 +450,8 @@ uniform float uPulseAmt;
 uniform sampler2D uFigures;
 uniform float uFigAmt;
 uniform float uFigLines;
+uniform vec4 uFocus;
+uniform float uFocusAmt;
 uniform float uFigBlur;
 out vec4 outColor;
 
@@ -588,6 +590,13 @@ void main() {
     float pr = dot(pd, pd);
     float glow = exp(-pr * 1.6) * uPulseAmt;
     col = mix(col, col * vec3(1.1, 1.06, 0.96) + vec3(0.05, 0.04, 0.02), glow * 0.55);
+  }
+
+  if (uFocusAmt > 0.001) {
+    vec2 fd = (uv * vec2(uAspect, 1.0) - uFocus.xy) / uFocus.zw;
+    float lit = exp(-dot(fd, fd) * 0.9);
+    vec3 quiet = mix(col, vec3(lum(col)), 0.4) * 0.74;
+    col = mix(col, quiet, uFocusAmt * (1.0 - lit));
   }
 
   if (uWash > 0.001) {

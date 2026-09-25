@@ -38,6 +38,9 @@ const pour = async (u, v, ms) => {
 };
 
 await page.getByRole('button', { name: 'Begin' }).click();
+await page.waitForFunction(() => document.querySelector('.narration .line'), null, { timeout: 60000 });
+await page.waitForTimeout(2500 / speed);
+await shot('opening');
 await page.waitForFunction(() => window.__game.debug.phase === 'painting', null, { timeout: 60000 });
 await shot('start');
 for (const [u, v, ms] of [[0.5, 0.12, 1400], [0.2, 0.3, 800], [0.8, 0.3, 800], [0.55, 0.8, 1400], [0.5, 0.575, 1000], [0.15, 0.85, 900], [0.85, 0.7, 900]]) {
@@ -70,7 +73,15 @@ for (const id of ids) {
   await page.waitForTimeout(2000 / speed);
   await shot(`${id}-gone`);
 }
-await page.waitForFunction(() => window.__game.debug.phase === 'drying', null, { timeout: 200000 });
-await page.waitForTimeout(3000 / speed);
-await shot('dry');
+await page.waitForFunction(() => window.__game.debug.phase === 'reflect', null, { timeout: 200000 });
+let seen = '';
+while ((await state()).phase === 'reflect') {
+  const line = await page.evaluate(() => document.querySelector('.narration .line:not(.out)')?.textContent ?? '');
+  if (line && line !== seen) {
+    seen = line;
+    await page.waitForTimeout(1800 / speed);
+    await shot('note');
+  }
+  await page.waitForTimeout(200);
+}
 await browser.close();

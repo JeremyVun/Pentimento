@@ -41,6 +41,9 @@ export interface CompositeParams {
   pulseAmt?: number;
   /** How strongly the moving figures show in pencil where the paint isn't alive. */
   figures?: number;
+  /** An ellipse in scene units to light while the rest of the painting dims. */
+  focus?: [number, number, number, number];
+  focusAmt?: number;
   /** 0 leaves only their colours, blurred by `figureBlur`. */
   figureLines?: number;
   figureBlur?: number;
@@ -487,6 +490,8 @@ export class Painter {
       .f('uPulseAmt', c.pulseAmt ?? 0)
       .tex('uFigures', 8, this.figuresTex)
       .f('uFigAmt', c.figures ?? 0)
+      .f('uFocus', ...(c.focus ?? [0, 0, 1, 1]))
+      .f('uFocusAmt', c.focus ? c.focusAmt ?? 0 : 0)
       .f('uFigLines', c.figureLines ?? 1)
       .f('uFigBlur', c.figureBlur ?? 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);

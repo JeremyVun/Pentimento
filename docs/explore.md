@@ -45,6 +45,17 @@ Core loop to test, "wet paint lives, dry paint keeps the moment":
 - Things happen at moments across the music, so there is a reason to stay for the whole sitting.
 - Lines come from what you paint and catch, not a timer.
 
+## Jeremy's feedback on prototype 1 (verbatim)
+
+> i think the issue is still that as a user i am watching the painting, but also having to read text underneath.
+
+## Prototype 2: reading and painting at separate times (built 2026-09-25)
+
+- No text while painting. The music, the view and the moments carry the sitting. Only the first chapter's two functional hints remain, under the board.
+- With the age card, one or two opening lines are inked onto the pale board before the sketch appears (`opening` in `src/story.ts`). Click to move on.
+- Once the painting dries and is still, she talks about what's in it: `before` lines, then each thing that was painted or caught in the order it happened, then `after` lines, then the closing line. Each note sits on the painting beside the thing it's about, which stays lit while the rest dims (`focus` in the composite). Click to move on.
+- Narration now lives on the board (`src/narration.ts`), not in a strip under it.
+
 ## Prototype 1: moments (built 2026-09-25)
 
 Play it with the worktree's dev server (`npx vite --port 5327` in `/private/tmp/pentimento-explore`). `?from=<chapter id>` starts at that chapter with every earlier year painted in full; `?speed=` still works. `tools/moment.mjs` plays one chapter and tries to catch each moment.
@@ -52,7 +63,7 @@ Play it with the worktree's dev server (`npx vite --port 5327` in `/private/tmp/
 What changed:
 - Poured paint stays wet for roughly 20 to 60 seconds (`DRY_RATE` in `src/game.ts`). While wet it moves with the view; as it dries it holds the moment it dried in (`HOLD_FS`). Pouring again wets it.
 - The pencil layer now shows the moving people, boats and birds, drawn fresh every frame (`drawFigures`). Where the paint isn't alive they show as pale pencil silhouettes, and reds and yellows show in colour: Joe's coat, June's coat, the robin, the train.
-- Each chapter has something that passes once (`moments` in `src/story.ts`, timings in `src/scene/config.ts`, positions in `momentSpot`). Pour on it while it's there and it's caught: it reacts, its line plays, and the paint around it sets a few seconds later so the painting keeps it. Missed moments get their own line.
+- Each chapter has something that passes once (`moments` in `src/story.ts`, timings in `src/scene/config.ts`, positions in `momentSpot`). Pour on it while it's there and it's caught: it reacts, and the paint around it sets a few seconds later so the painting keeps it. Missed moments get their own line. (Prototype 2 moved all these lines to after the sitting.)
 - The bell is rung by the game (`audio.bell()`), not written into the scores, so eight o'clock happens mid-sitting.
 - Finish painting only appears once every moment has passed.
 

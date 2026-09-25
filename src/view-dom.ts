@@ -28,11 +28,13 @@ export class View {
   onAgain: (() => void) | null = null;
   onSave: (() => void) | null = null;
   onMute: ((muted: boolean) => void) | null = null;
+  onBoardPress: (() => void) | null = null;
 
   constructor(root: HTMLElement) {
     this.board = el('canvas', 'board', root);
     this.board.setAttribute('aria-label', 'The painting');
     this.board.setAttribute('role', 'img');
+    this.board.addEventListener('pointerdown', () => this.onBoardPress?.());
 
     this.title = el('div', 'title', root);
     const plate = el('div', 'plate', this.title);
@@ -102,7 +104,7 @@ export class View {
       Object.assign(e.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
     }
     const top = y + h;
-    Object.assign(this.narrationRoot.style, { left: `${x}px`, width: `${w}px`, top: `${top}px`, height: `${vh - top}px` });
+    Object.assign(this.narrationRoot.style, { left: `${x}px`, width: `${w}px`, top: `${y}px`, height: `${h}px` });
     for (const e of [this.hint, this.notes]) {
       Object.assign(e.style, { left: `${x}px`, width: `${w}px`, top: `${top}px`, height: `${vh - top}px` });
     }

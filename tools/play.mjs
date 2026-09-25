@@ -48,7 +48,7 @@ for (let c = 0; c < chapters; c++) {
     await page.waitForTimeout(250);
   }
   await shot(`${String(c + 1).padStart(2, '0')}c-painted`);
-  await page.waitForFunction(() => window.__game.debug.phase === 'drying', null, { timeout: 200000 });
+  await page.waitForFunction(() => ['drying', 'reflect'].includes(window.__game.debug.phase), null, { timeout: 200000 });
   await page.waitForTimeout(3000 / speed);
   await shot(`${String(c + 1).padStart(2, '0')}d-dry`);
 }

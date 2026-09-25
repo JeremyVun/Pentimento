@@ -32,7 +32,12 @@ export interface Chapter {
   id: Exclude<ScoreId, 'title' | 'lift'>;
   card: string;
   voice: 'gran' | 'grandchild';
-  lines: { at: number; text: string }[];
+  /** Read with the age card, before the sketch appears. */
+  opening: string[];
+  /** Said once the painting has dried, before she talks about what's in it. */
+  before?: string[];
+  /** Said after what's in the painting, before the closing line. */
+  after?: string[];
   subjects: Subject[];
   close: string;
   closeLow: string;
@@ -51,10 +56,12 @@ export const CHAPTERS: Chapter[] = [
     id: 'nine',
     card: 'Nine',
     voice: 'gran',
-    lines: [
-      { at: 3, text: "This board is older than your mother, so I'd better explain it." },
-      { at: 16, text: 'My aunt gave me a tin of paints for my ninth birthday. There were twelve colours, and I used up the white first.' },
-      { at: 33, text: 'This was the view from my bedroom window. There was no bridge then, so everyone crossed on the ferry.' },
+    opening: [
+      "My aunt gave me a tin of paints for my ninth birthday. There were twelve colours, and I used up the white first.",
+      "This was the view from my bedroom window.",
+    ],
+    before: [
+      "There was no bridge then, so everyone crossed on the ferry.",
     ],
     moments: [
       {
@@ -74,10 +81,14 @@ export const CHAPTERS: Chapter[] = [
     id: 'sixteen',
     card: 'Sixteen',
     voice: 'gran',
-    lines: [
-      { at: 3, text: 'At sixteen I wanted to leave this town, and I told everyone so.' },
-      { at: 17, text: 'They were building the bridge that year. It took three years, and the whole town complained about the noise.' },
-      { at: 32, text: 'I kept painting the view, even though I said I was sick of it.' },
+    opening: [
+      "At sixteen I wanted to leave this town, and I told everyone so.",
+    ],
+    before: [
+      "They were building the bridge that year. It took three years, and the whole town complained about the noise.",
+    ],
+    after: [
+      "I kept painting the view, even though I said I was sick of it.",
     ],
     moments: [
       {
@@ -99,8 +110,8 @@ export const CHAPTERS: Chapter[] = [
     id: 'twentythree',
     card: 'Twenty-three',
     voice: 'gran',
-    lines: [
-      { at: 3, text: 'The bridge opened the spring I turned twenty-three. The ferry stopped the same week.' },
+    opening: [
+      "The bridge opened the spring I turned twenty-three. The ferry stopped the same week.",
     ],
     moments: [
       {
@@ -123,9 +134,9 @@ export const CHAPTERS: Chapter[] = [
     id: 'thirtyone',
     card: 'Thirty-one',
     voice: 'gran',
-    lines: [
-      { at: 3, text: 'Our daughter June was born in May. That summer the washing line was never empty.' },
-      { at: 11, text: 'I nearly didn\'t paint that year. I did this one in twenty minutes while she slept.' },
+    opening: [
+      "Our daughter June was born in May. That summer the washing line was never empty.",
+      "I nearly didn't paint that year. I did this one in twenty minutes while she slept.",
     ],
     paint: 9,
     moments: [
@@ -147,10 +158,14 @@ export const CHAPTERS: Chapter[] = [
     id: 'fortyfour',
     card: 'Forty-four',
     voice: 'gran',
-    lines: [
-      { at: 3, text: 'My father died in the November. A week later the river flooded, right up to the garden wall.' },
-      { at: 17, text: "I painted this one at night, because I couldn't sleep." },
-      { at: 33, text: 'Joe left the kitchen lamp on for me. I could see its light on the wet grass.' },
+    opening: [
+      "My father died in the November. A week later the river flooded, right up to the garden wall.",
+    ],
+    before: [
+      "I painted this one at night, because I couldn't sleep.",
+    ],
+    after: [
+      "Joe left the kitchen lamp on for me. I could see its light on the wet grass.",
     ],
     subjects: [
       { id: 'lanterns', x: 0.74, y: 0.53, rx: 0.33, ry: 0.04, line: 'The water came within a foot of the arches. Half the town stood on the bridge all night to watch.' },
@@ -171,9 +186,11 @@ export const CHAPTERS: Chapter[] = [
     id: 'fortynine',
     card: 'Forty-nine',
     voice: 'gran',
-    lines: [
-      { at: 3, text: "June left for the city when she was eighteen. I'd wanted to leave at her age, and she actually did it." },
-      { at: 58, text: 'The house was very quiet that winter. It took us a long time to get used to it.' },
+    opening: [
+      "June left for the city when she was eighteen. I'd wanted to leave at her age, and she actually did it.",
+    ],
+    after: [
+      "The house was very quiet that winter. It took us a long time to get used to it.",
     ],
     moments: [
       {
@@ -195,9 +212,11 @@ export const CHAPTERS: Chapter[] = [
     id: 'seventytwo',
     card: 'Seventy-two',
     voice: 'gran',
-    lines: [
-      { at: 3, text: 'Joe died in the January. We had been married forty-eight years.' },
-      { at: 62, text: 'I nearly didn\'t paint this one. June came home and sat with me while I did.' },
+    opening: [
+      "Joe died in the January. We had been married forty-eight years.",
+    ],
+    after: [
+      "I nearly didn't paint this one. June came home and sat with me while I did.",
     ],
     moments: [
       {
@@ -224,10 +243,12 @@ export const CHAPTERS: Chapter[] = [
     card: 'Eighty-six',
     voice: 'gran',
     brush: 1.5,
-    lines: [
-      { at: 3, text: 'My eyes went the way my mother\'s did. Now I see colours and not much else.' },
-      { at: 13, text: "I don't go out much any more, so this time I painted the window as well." },
-      { at: 21, text: 'You were four that spring. You spent the whole visit under the fig tree.' },
+    opening: [
+      "My eyes went the way my mother's did. Now I see colours and not much else.",
+    ],
+    before: [
+      "I don't go out much any more, so this time I painted the window as well.",
+      "You were four that spring. You spent the whole visit under the fig tree.",
     ],
     moments: [
       {
@@ -246,10 +267,12 @@ export const CHAPTERS: Chapter[] = [
     id: 'later',
     card: 'Twenty years later',
     voice: 'grandchild',
-    lines: [
-      { at: 3, text: "Gran died the winter after she gave me the board. It sat in a cupboard at Mum's for twenty years." },
-      { at: 17, text: 'I live in her house now. This is the view from her bedroom window.' },
-      { at: 37, text: 'In some lights you can see her paintings under mine. The bridge shows through the most.' },
+    opening: [
+      "Gran died the winter after she gave me the board. It sat in a cupboard at Mum's for twenty years.",
+      "I live in her house now. This is the view from her bedroom window.",
+    ],
+    after: [
+      "In some lights you can see her paintings under mine. The bridge shows through the most.",
     ],
     subjects: [
       { id: 'fig', x: 0.2, y: 0.62, rx: 0.25, ry: 0.2, line: "The fig tree is enormous now. I still haven't seen a fig flower." },

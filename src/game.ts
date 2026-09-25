@@ -1,20 +1,21 @@
 import type { AudioEngine } from './audio';
 import { Brush, Coverage } from './brush';
 import { ASPECT, DEFAULT_LAYERS, Painter, type Dab } from './gl/painter';
-import { Narration } from './narration';
+import { Narration, type NoteAt } from './narration';
 import { SCENES, type SceneConfig } from './scene/config';
-import { drawFigures, momentSpot } from './scene/actors';
+import { drawFigures, momentSpot, type Spot } from './scene/actors';
 import { drawScene } from './scene/draw';
 import { drawFlow } from './scene/flow';
 import { drawRegions } from './scene/regions';
 import { CHAPTERS, UI, type Chapter } from './story';
 import type { View } from './view-dom';
 
-type Phase = 'title' | 'opening' | 'intro' | 'painting' | 'drying' | 'lift';
+type Phase = 'title' | 'opening' | 'intro' | 'painting' | 'drying' | 'reflect' | 'lift';
 
 const BRUSH_RADIUS = 0.034;
 const WAKE_AT = 0.42;
-const INTRO = 5.2;
+/** Seconds from the last opening line to the brush: the card fades, the sketch draws itself, the music starts. */
+const SETTLE = 2.6;
 /** How fast poured paint dries while painting. Wet paint moves with the view; dry paint keeps its moment. */
 const DRY_RATE = 0.06;
 /** Seconds after a moment is caught before the paint around it sets, holding it mid-wave. */
@@ -33,7 +34,6 @@ export class Game {
   private cfg: SceneConfig = SCENES.title;
   private sceneT = 0;
   private wakeTimes: Record<string, number> = {};
-  private shownLines = new Set<number>();
   private sceneCanvas: HTMLCanvasElement;
   private sceneCtx: CanvasRenderingContext2D;
   private flowCanvas: HTMLCanvasElement;
@@ -48,7 +48,6 @@ export class Game {
   private living = 1;
   private finishRequested = false;
   private baked = false;
-  private closeQueued = false;
   private paintedSeconds = 0;
   private hintShown = false;
   private checkT = 0;
@@ -56,7 +55,14 @@ export class Game {
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private sceneScale = 0.62;
   private figuresCanvas: HTMLCanvasElement;
-  private moments: Record<string, { state: MomentState; set: boolean }> = {};
+  private moments: Record<string, { state: MomentState; set: boolean; last?: Spot }> = {};
+  /** What this sitting's painting holds, in the order it was painted, with where it is. */
+  private kept: { lines: string[]; spot?: Spot }[] = [];
+  private introEnd = Infinity;
+  private openingQueued = false;
+  private musicStarted = false;
+  private focus: Spot | null = null;
+  private focusAmt = 0;
   private bellRung = false;
   private paintLeft = Infinity;
   private catchHint = false;
@@ -88,6 +94,12 @@ export class Game {
     brush.radius = BRUSH_RADIUS;
     brush.onFirstPaint = () => this.audio.unlock();
     narration.onVisible = (on) => this.audio.duck(on);
+    narration.onLine = (at) => {
+      this.focus = at ? { x: at.u * ASPECT, y: at.v, rx: Math.max(0.05, at.ru * ASPECT * 1.6), ry: Math.max(0.04, at.rv * 1.8) } : null;
+    };
+    view.onBoardPress = () => {
+      if (this.phase === 'intro' || this.phase === 'reflect') this.narration.skip();
+    };
     view.onBegin = () => this.begin();
     view.onFinish = () => { this.finishRequested = true; };
     view.onAgain = () => this.again();
@@ -209,11 +221,13 @@ export class Game {
     this.setScene(SCENES[ch.id]);
     this.painter.clearMask();
     this.coverage.clear();
-    this.shownLines.clear();
     this.finishRequested = false;
     this.baked = false;
-    this.closeQueued = false;
     this.moments = {};
+    this.kept = [];
+    this.introEnd = Infinity;
+    this.openingQueued = false;
+    this.musicStarted = false;
     for (const m of ch.moments ?? []) this.moments[m.id] = { state: 'waiting', set: false };
     this.bellRung = false;
     this.paintLeft = ch.paint ?? Infinity;
@@ -233,6 +247,7 @@ export class Game {
       if (this.pulse.t > 3.5) this.pulse = null;
     }
     this.narration.update(dt);
+    this.focusAmt += ((this.focus && this.phase === 'reflect' ? 1 : 0) - this.focusAmt) * Math.min(1, dt * 2.5);
     const dabs = this.brush.update(dt);
 
     switch (this.phase) {
@@ -252,16 +267,27 @@ export class Game {
       }
 
       case 'intro': {
+        const ch = this.chapter!;
         const first = this.chapterIndex === 0;
         const t = this.phaseT;
-        if (first) this.wash = 1 - ramp(t, 3.2, 4.6);
-        else this.wash = 0.55 * ramp(t, 0, 0.9) * (1 - ramp(t, 3.3, 4.6));
-        this.sketch = ramp(t, 2.4, 4.8);
-        if (t >= 2.8 && t - dt < 2.8) this.view.hideCard();
-        if (t >= INTRO - 1.6 && t - dt < INTRO - 1.6) {
-          this.audio.play(this.chapter!.id, this.cfg.duration + 1.6);
+        if (!this.openingQueued && t >= 1.4) {
+          this.openingQueued = true;
+          for (const line of ch.opening) this.narration.push(line, ch.voice, { v: 0.74 });
         }
-        if (t >= INTRO) {
+        if (this.openingQueued && !Number.isFinite(this.introEnd) && !this.narration.busy) {
+          this.introEnd = Math.max(t, 2.8) + SETTLE;
+        }
+        const e = this.introEnd;
+        const settled = Number.isFinite(e);
+        if (first) this.wash = settled ? 1 - ramp(t, e - 1.4, e) : 1;
+        else this.wash = 0.55 * ramp(t, 0, 0.9) * (settled ? 1 - ramp(t, e - 1.3, e) : 1);
+        this.sketch = settled ? ramp(t, e - 2.4, e) : 0;
+        if (settled && t >= e - SETTLE && t - dt < e - SETTLE) this.view.hideCard();
+        if (settled && !this.musicStarted && t >= e - 1.6) {
+          this.musicStarted = true;
+          this.audio.play(ch.id, this.cfg.duration + 1.6);
+        }
+        if (settled && t >= e) {
           this.phase = 'painting';
           this.phaseT = 0;
           this.wash = 0;
@@ -279,12 +305,6 @@ export class Game {
         this.sceneT += dt;
         this.applyPour(dabs, dt);
         this.painter.dryMask(dt, DRY_RATE);
-        ch.lines.forEach((l, i) => {
-          if (!this.shownLines.has(i) && this.phaseT >= l.at) {
-            this.shownLines.add(i);
-            this.narration.push(l.text, ch.voice);
-          }
-        });
         this.readT -= dt;
         if (this.readT <= 0) {
           this.readT = 0.2;
@@ -298,7 +318,7 @@ export class Game {
             if (this.coverage.ellipse(s.x, s.y, s.rx, s.ry) >= WAKE_AT) {
               this.wakeTimes[s.id] = this.sceneT;
               this.pulse = { x: s.x, y: s.y, rx: s.rx * 1.3, ry: s.ry * 1.6, t: 0 };
-              this.narration.push(s.line, ch.voice);
+              this.kept.push({ lines: [s.line], spot: s });
               this.audio.wake(s.x / ASPECT);
             }
           }
@@ -307,7 +327,7 @@ export class Game {
         this.updateMoments(ch);
         if (this.brush.down) this.paintedSeconds += dt;
         if (!this.catchHint && (this.paintedSeconds > 2.5 || this.coverage.total() > 0.06)) this.view.hideHint();
-        const canFinish = this.phaseT > 25 && this.shownLines.size === ch.lines.length
+        const canFinish = this.phaseT > 25
           && Object.values(this.moments).every((m) => m.state === 'gone');
         this.view.showFinish(canFinish);
         if (this.phaseT >= this.cfg.duration || this.finishRequested || this.phaseT >= this.finishAt) this.enterDrying();
@@ -324,11 +344,12 @@ export class Game {
           this.painter.bake(this.chapterIndex);
           this.living = 0;
         }
-        if (!this.closeQueued && t >= 1.0) {
-          this.closeQueued = true;
-          this.narration.push(this.closeLine(), this.chapter!.voice);
-        }
-        if (t > 3 && !this.narration.busy) {
+        if (this.baked && t >= 1.8) this.enterReflect();
+        break;
+      }
+
+      case 'reflect': {
+        if (this.phaseT > 1 && !this.narration.busy) {
           if (this.chapterIndex + 1 < CHAPTERS.length) this.startChapter(this.chapterIndex + 1);
           else this.enterLift();
         }
@@ -391,23 +412,24 @@ export class Game {
       if (m.state === 'waiting') {
         if (!spot) continue;
         m.state = 'passing';
-        if (def.appears) this.narration.push(def.appears, ch.voice, true);
+        m.last = spot;
         if (this.chapterIndex === 0 && def.id === 'ferry') {
           this.catchHint = true;
           this.view.showHint(matchMedia('(pointer: coarse)').matches ? UI.catchTouch : UI.catchMouse);
         }
       } else if (m.state === 'passing') {
+        if (spot) m.last = spot;
         if (!spot) {
           m.state = 'gone';
           this.catchHint = false;
           this.view.hideHint();
-          if (def.missed) this.narration.push(def.missed, ch.voice);
+          if (def.missed) this.kept.push({ lines: [def.appears, def.missed].filter((l): l is string => !!l), spot: m.last });
         } else if (this.coverage.wetness(spot.x, spot.y, spot.rx * 0.8, spot.ry) > 0.3) {
           m.state = 'caught';
           this.catchHint = false;
           this.view.hideHint();
           this.wakeTimes[def.id] = this.sceneT;
-          this.narration.push(def.caught, ch.voice, true);
+          this.kept.push({ lines: [def.appears, def.caught, def.after].filter((l): l is string => !!l), spot });
           if (!def.ghost) {
             this.pulse = { x: spot.x, y: spot.y, rx: spot.rx * 2.5, ry: spot.ry * 2.5, t: 0 };
             this.audio.wake(spot.x / ASPECT);
@@ -418,10 +440,7 @@ export class Game {
           m.set = true;
           this.painter.setPaint(spot.x, spot.y, spot.rx + 0.015, spot.ry + 0.015);
         }
-        if (!spot) {
-          m.state = 'gone';
-          if (def.after) this.narration.push(def.after, ch.voice);
-        }
+        if (!spot) m.state = 'gone';
       }
     }
   }
@@ -436,6 +455,20 @@ export class Game {
     if (total < 0.15) return ch.closeLow;
     if (ch.closeFull && this.coverage.region(0, 0.45) > 0.8) return ch.closeFull;
     return ch.close;
+  }
+
+  /** The painting is dry and still. She talks about what's in it, pointing at each thing in turn. */
+  private enterReflect(): void {
+    const ch = this.chapter!;
+    this.phase = 'reflect';
+    this.phaseT = 0;
+    const note = (sp: Spot): NoteAt => ({ u: sp.x / ASPECT, v: sp.y, ru: sp.rx / ASPECT, rv: sp.ry });
+    for (const line of ch.before ?? []) this.narration.push(line, ch.voice);
+    for (const k of this.kept) {
+      for (const line of k.lines) this.narration.push(line, ch.voice, k.spot ? { at: note(k.spot) } : {});
+    }
+    for (const line of ch.after ?? []) this.narration.push(line, ch.voice);
+    this.narration.push(this.closeLine(), ch.voice);
   }
 
   private enterDrying(): void {
@@ -531,6 +564,8 @@ export class Game {
       pulse: this.pulse ? [this.pulse.x, this.pulse.y, this.pulse.rx, this.pulse.ry] as [number, number, number, number] : undefined,
       pulseAmt: this.pulse ? Math.sin(Math.min(1, this.pulse.t / 3.5) * Math.PI) ** 1.5 : 0,
       figures: this.phase === 'painting' || this.phase === 'intro' || (this.phase === 'drying' && !this.baked) ? this.sketch : 0,
+      focus: this.focus ? [this.focus.x, this.focus.y, this.focus.rx, this.focus.ry] as [number, number, number, number] : undefined,
+      focusAmt: this.focusAmt,
       figureLines: this.cfg.noPencil ? 0 : 1,
       figureBlur: this.cfg.noPencil ? 0.012 : 0,
     };
@@ -552,7 +587,7 @@ export class Game {
   render(time: number, frameSec = 1 / 60): void {
     this.adapt(frameSec);
     const needsLiving = this.living > 0 && (this.phase === 'title' || this.phase === 'opening'
-      || this.phase === 'painting' || (this.phase === 'drying' && !this.baked) || (this.phase === 'intro' && this.phaseT > INTRO - 1.5));
+      || this.phase === 'painting' || (this.phase === 'drying' && !this.baked) || (this.phase === 'intro' && this.phaseT > this.introEnd - 1.5));
     if (needsLiving) {
       const woke: Record<string, number> = {};
       for (const [k, v] of Object.entries(this.wakeTimes)) woke[k] = this.sceneT - v;
