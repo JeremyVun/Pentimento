@@ -8,7 +8,7 @@ import { Brush } from './brush';
 import { Game } from './game';
 import { Painter } from './gl/painter';
 import { Narration } from './narration';
-import { GpuClock, Governor, TIERS, tierNamed } from './quality';
+import { Governor, TIERS, tierNamed } from './quality';
 import { UI } from './story';
 import { View } from './view-dom';
 import { runViewer } from './view';
@@ -30,9 +30,8 @@ function start(): void {
   }
   const forced = tierNamed(params.get('quality'));
   if (forced > 0) painter.setLook(TIERS[forced].look);
-  // ?quality pins a tier. The QA harnesses' own GPU timers would clash with ours, so they leave the clock to fences.
-  const clock = forced < 0 ? new GpuClock(painter.gl, !params.has('perfmode')) : null;
-  const governor = new Governor(Math.max(0, forced), clock, forced >= 0);
+  // ?quality=<tier name or number> pins a tier, for QA.
+  const governor = new Governor(Math.max(0, forced), forced >= 0);
   const audio = createAudioEngine();
   let stopped = false;
   const stop = (message: string) => {
@@ -70,11 +69,9 @@ function start(): void {
     const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)) * ((window as unknown as { __speed?: number }).__speed ?? speed);
     try {
       const t0 = performance.now();
-      clock?.begin();
       game.update(dt);
       game.render(now / 1000);
-      clock?.end(game.heavy);
-      governor.drawn(now, performance.now() - t0, game.heavy);
+      governor.drawn(now, game.heavy, performance.now() - t0);
     } catch (e) {
       console.error(e);
       stop(UI.crashed);

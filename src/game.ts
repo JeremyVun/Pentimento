@@ -91,6 +91,7 @@ export class Game {
   private bellRung = false;
   private paintLeft = Infinity;
   private catchHint = false;
+  private tierAsked = false;
 
   constructor(
     private painter: Painter,
@@ -294,6 +295,7 @@ export class Game {
     this.musicEnded = false;
     for (const m of ch.moments ?? []) this.moments[m.id] = { state: 'waiting', set: false };
     this.bellRung = false;
+    this.tierAsked = false;
     this.paintLeft = ch.paint ?? Infinity;
     this.pourSpots = [];
     this.finishAt = Infinity;
@@ -346,8 +348,9 @@ export class Game {
         const e = this.introEnd;
         const settled = Number.isFinite(e);
         // Under the wash, before the pencil starts, nothing is wet and the board barely shows: the one time the look may change.
-        if (this.governor && t >= 0.9 && (!settled || t < e - 2.4)) {
+        if (this.governor && !this.tierAsked && t >= 0.9 && (!settled || t < e - 2.4)) {
           const d = this.governor.safeMoment();
+          this.tierAsked = !this.governor.timing;
           if (d) this.applyTier(d.tier, d.reason);
         }
         if (first) this.wash = settled ? 1 - ramp(t, e - 1.4, e) : 1;

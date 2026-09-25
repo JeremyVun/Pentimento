@@ -1,7 +1,7 @@
 import { GL, Program, Target, bindTarget, clearTarget, createFloatTarget, createTarget } from './gl';
 import {
   BASE_FS, COMPOSITE_FS, DAB_FS, DAB_VS, FULLSCREEN_VS, HOLD_FS, OUTLINE_FS, PAPER_FS, POUR_DOWN_FS, POUR_SEED_FS, POUR_SEED_VS, POUR_SPREAD_FS,
-  RESAMPLE_FS, RESAMPLE_LAYER_FS, ROUGH_FS, SKETCH_LINE_FS, STATIC_FLOW_FS, STATIC_FS, STROKE_FS, STROKE_VS, variant,
+  RESAMPLE_FS, ROUGH_FS, SKETCH_LINE_FS, STATIC_FLOW_FS, STATIC_FS, STROKE_FS, STROKE_VS, variant,
 } from './shaders';
 
 export const ASPECT = 1.6;
@@ -155,7 +155,6 @@ export class Painter {
   private pStaticFlow: Program | null = null;
   private pRough: Program | null = null;
   private pResample: Program | null = null;
-  private pResampleLayer: Program | null = null;
   private staticA: Target | null = null;
   private staticB: Target | null = null;
   private staticFbo: WebGLFramebuffer | null = null;
@@ -325,8 +324,9 @@ export class Painter {
   }
 
   /**
-   * Switches how much work each frame does. A new scale remakes every full-size target, carrying the dried years, the
-   * held picture and the snapshots across by resampling. Only call it when nothing is wet: the mask and lift are cleared.
+   * Switches how much work each frame does. A new scale remakes the targets drawn every frame, carrying the held picture
+   * across. The dried years and their snapshots always stay at full size, so they never lose detail however often the
+   * look changes. Only call it when nothing is wet: the mask and lift are cleared.
    */
   setLook(look: Look): void {
     const old = this.look;
@@ -411,7 +411,6 @@ export class Painter {
     const down = w < this.w;
     const spread: [number, number] = down ? [0.25 / w, 0.25 / h] : [0, 0];
     this.pResample ??= new Program(gl, FULLSCREEN_VS, RESAMPLE_FS);
-    this.pResampleLayer ??= new Program(gl, FULLSCREEN_VS, RESAMPLE_LAYER_FS);
     gl.disable(gl.BLEND);
     gl.bindVertexArray(this.emptyVao);
     const carry = (src: Target): Target => {
@@ -427,33 +426,9 @@ export class Painter {
       this.dropTarget(old);
       return createTarget(gl, w, h, true, half);
     };
-    this.dry[this.dryIdx] = carry(this.dry[this.dryIdx]);
-    this.dry[1 - this.dryIdx] = fresh(this.dry[1 - this.dryIdx]);
-    clearTarget(gl, this.dry[1 - this.dryIdx], r, g, b);
     this.held[this.heldIdx] = carry(this.held[this.heldIdx]);
     this.held[1 - this.heldIdx] = fresh(this.held[1 - this.heldIdx]);
     clearTarget(gl, this.held[1 - this.heldIdx], r, g, b);
-
-    const snaps = gl.createTexture()!;
-    gl.bindTexture(gl.TEXTURE_2D_ARRAY, snaps);
-    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, w, h, MAX_LAYERS);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    const fbo = gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.viewport(0, 0, w, h);
-    for (let layer = 0; layer < MAX_LAYERS; layer++) {
-      gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, snaps, 0, layer);
-      this.pResampleLayer!.use().tex('uSrc', 0, this.snaps, gl.TEXTURE_2D_ARRAY).f('uLayer', layer).f('uSpread', ...spread);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.deleteFramebuffer(fbo);
-    gl.deleteTexture(this.snaps);
-    this.snaps = snaps;
-
     this.living = fresh(this.living);
     this.mask = fresh(this.mask, this.floatPaint);
     this.lift = fresh(this.lift, this.floatPaint);
@@ -918,7 +893,7 @@ export class Painter {
     if (layer >= 0 && layer < MAX_LAYERS) {
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, next.fbo);
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.snaps);
-      gl.copyTexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, 0, 0, this.w, this.h);
+      gl.copyTexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, 0, 0, this.baseW, this.baseH);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
     }
     this.clearMask();

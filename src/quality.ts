@@ -1,4 +1,3 @@
-import type { GL } from './gl/gl';
 import type { Look } from './gl/painter';
 
 export interface Tier {
@@ -8,7 +7,7 @@ export interface Tier {
   strokes: number;
   /** Draws at most 30 frames a second. */
   halfRate: boolean;
-  /** GPU time per frame relative to the full tier, measured pouring at 1800x1125 on an M4 Pro with the GPU saturated. */
+  /** Frame time relative to the full tier where the GPU is what's slow, measured pouring at 1800x1125 on an M4 Pro. */
   gpuCost: number;
 }
 
@@ -29,7 +28,7 @@ export function tierNamed(name: string | null): number {
   return TIERS.findIndex((t) => t.name === name);
 }
 
-/** Share of recent heavy frames that missed their slot before the look steps down, and the most allowed before it steps up. */
+/** Share of recent heavy frames that missed their slot before the look steps down, and the most allowed to count as smooth. */
 const SLOW = 0.12;
 const SMOOTH = 0.02;
 /** A frame misses when it takes this many times the frame slot. */
@@ -38,101 +37,20 @@ const MISS = 1.5;
 const WINDOW = 600;
 /** Heavy frames needed before judging; half as many do when most of them miss. */
 const ENOUGH = 60;
-/** Frames drawn nothing to time the display alone. */
+/** Frames drawn with nothing, to time the display alone. */
 const CALIBRATE_FRAMES = 6;
 /** A calibration older than this is taken again before acting on it, as a battery saver may have capped the display since. */
 const CALIBRATION_TTL = 20000;
 const WARMUP_MS = 1200;
 const SETTLE_MS = 700;
-/** The predicted frame must fit in this share of its slot to step up, halved for each time that tier has failed. */
-const UP_MARGIN = 0.7;
-/** And this share to settle on a tier when stepping down. */
+/** Stepping down picks the first tier whose predicted frame fits in this share of its slot. */
 const DOWN_MARGIN = 0.85;
-
 /**
- * GPU time per frame: timer queries where the browser has them, otherwise how long a fence takes to pass, sampled
- * every few frames. Either way it only ever reads results a frame or more later, so it never stalls the GPU.
+ * Nothing in a browser says how much room a frame that keeps up has left (GPU timers read high at light load, as the
+ * GPU clocks down), so the look steps back up on trial after this many smooth chapters in a row, and waits three times
+ * as long again each time that tier has failed a trial.
  */
-export class GpuClock {
-  private ext: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
-  private pending: { q: WebGLQuery; heavy: boolean }[] = [];
-  private active: WebGLQuery | null = null;
-  private fencing = false;
-  private frame = 0;
-  readonly samples: number[] = [];
-
-  constructor(private gl: GL, timers: boolean) {
-    this.ext = timers ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : null;
-  }
-
-  get kind(): string {
-    return this.ext ? 'timer' : 'fence';
-  }
-
-  begin(): void {
-    this.frame++;
-    if (!this.ext || this.pending.length > 6) return;
-    const q = this.gl.createQuery();
-    if (!q) return;
-    this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, q);
-    this.active = q;
-  }
-
-  /** `heavy`: whether the frame rendered the full living view; only those are kept. */
-  end(heavy: boolean): void {
-    const gl = this.gl;
-    if (this.ext) {
-      if (this.active) {
-        gl.endQuery(this.ext.TIME_ELAPSED_EXT);
-        this.pending.push({ q: this.active, heavy });
-        this.active = null;
-      }
-      this.poll();
-      return;
-    }
-    if (!heavy || this.fencing || this.frame % 8 !== 0) return;
-    const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-    if (!fence) return;
-    gl.flush();
-    this.fencing = true;
-    const t0 = performance.now();
-    const check = () => {
-      const ms = performance.now() - t0;
-      const status = gl.clientWaitSync(fence, 0, 0);
-      if (status === gl.TIMEOUT_EXPIRED && ms < 200) {
-        setTimeout(check, 1);
-        return;
-      }
-      gl.deleteSync(fence);
-      this.fencing = false;
-      if (status !== gl.WAIT_FAILED && status !== gl.TIMEOUT_EXPIRED) this.push(ms);
-    };
-    setTimeout(check, 0);
-  }
-
-  private poll(): void {
-    const gl = this.gl;
-    const ext = this.ext!;
-    const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
-    while (this.pending.length) {
-      const { q, heavy } = this.pending[0];
-      if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
-      this.pending.shift();
-      const ns = gl.getQueryParameter(q, gl.QUERY_RESULT) as number;
-      gl.deleteQuery(q);
-      if (!disjoint && heavy) this.push(ns / 1e6);
-    }
-  }
-
-  private push(ms: number): void {
-    this.samples.push(ms);
-    if (this.samples.length > 240) this.samples.shift();
-  }
-
-  reset(): void {
-    this.samples.length = 0;
-  }
-}
+const TRIAL_AFTER = 2;
 
 const quantile = (a: number[], q: number): number => {
   if (!a.length) return NaN;
@@ -140,10 +58,7 @@ const quantile = (a: number[], q: number): number => {
   return s[Math.min(s.length - 1, Math.floor(q * s.length))];
 };
 
-interface Sample {
-  delta: number;
-  js: number;
-}
+const mean = (a: number[]): number => a.reduce((x, y) => x + y, 0) / a.length;
 
 export interface Decision {
   tier: number;
@@ -156,7 +71,11 @@ export interface Decision {
  */
 export class Governor {
   tier: number;
-  private heavy: Sample[] = [];
+  /** Time between drawn frames that rendered the full living view, the work the tiers change. */
+  private heavy: number[] = [];
+  /** Main-thread time of those same frames. No tier shortens it except half rate, so a frame never takes less. */
+  private js: number[] = [];
+  /** Time between animation frames of any kind, for a first guess at the display's rate. */
   private deltas: number[] = [];
   private lastNow = -1;
   private lastDrawn = -1;
@@ -167,12 +86,13 @@ export class Governor {
   private vsync = NaN;
   private calibratedAt = -Infinity;
   private lastChange = -Infinity;
-  private upFailures: number[] = TIERS.map(() => 0);
+  private failures: number[] = TIERS.map(() => 0);
   private steppedUpTo = -1;
+  private smoothRuns = 0;
   private drawing = true;
 
   /** `locked` keeps the tier it starts with, for QA. */
-  constructor(tier: number, private clock: GpuClock | null, private locked = false) {
+  constructor(tier: number, private locked = false) {
     this.tier = tier;
     document.addEventListener('visibilitychange', () => this.quiet(performance.now()));
   }
@@ -183,19 +103,19 @@ export class Governor {
     const delta = this.lastNow < 0 ? 0 : now - this.lastNow;
     this.lastNow = now;
     if (this.calibrating > 0) {
+      // The first two may still be waiting on the last real frame.
       if (this.calibrating <= CALIBRATE_FRAMES - 2 && delta > 0) this.calibration.push(delta);
       this.calibrating--;
       if (this.calibrating === 0) {
         this.vsync = quantile(this.calibration, 0.5);
         this.calibratedAt = now;
-        this.quietUntil = now + 100;
-        this.lastDrawn = -1;
+        console.debug(`[quality] display timed at ${this.vsync.toFixed(1)} ms a frame`);
+        this.quiet(now);
       }
       this.drawing = false;
       return false;
     }
-    const t = TIERS[this.tier];
-    if (t.halfRate && this.lastDrawn >= 0 && now - this.lastDrawn < 1000 / 30 - this.display() / 2) {
+    if (TIERS[this.tier].halfRate && this.lastDrawn >= 0 && now - this.lastDrawn < 1000 / 30 - this.display() / 2) {
       this.drawing = false;
       return false;
     }
@@ -207,17 +127,21 @@ export class Governor {
     return true;
   }
 
-  /** Called after a drawn frame with its JS time and whether it rendered the full living view. */
-  drawn(now: number, jsMs: number, heavy: boolean): void {
+  /** Called after each drawn frame with whether it rendered the full living view and how long its script ran. */
+  drawn(now: number, heavy: boolean, jsMs: number): void {
     if (!this.drawing) return;
     const delta = this.lastDrawn < 0 ? 0 : now - this.lastDrawn;
     this.lastDrawn = now;
     if (!heavy || delta <= 0 || delta >= 250 || now < this.quietUntil || now - this.start < WARMUP_MS) return;
-    this.heavy.push({ delta, js: jsMs });
-    if (this.heavy.length > WINDOW) this.heavy.shift();
+    this.heavy.push(delta);
+    this.js.push(jsMs);
+    if (this.heavy.length > WINDOW) {
+      this.heavy.shift();
+      this.js.shift();
+    }
   }
 
-  /** The next frames do one-off work (a new scene, a new look), so they say nothing about the tier. */
+  /** The next frames do one-off work (a new scene, a new look, a hidden tab), so they say nothing about the tier. */
   quiet(now = this.lastNow): void {
     this.quietUntil = now + SETTLE_MS;
     this.lastDrawn = -1;
@@ -236,69 +160,56 @@ export class Governor {
 
   private missRatio(): number {
     const limit = this.slot() * MISS;
-    return this.heavy.filter((s) => s.delta > limit).length / this.heavy.length;
+    return this.heavy.filter((d) => d > limit).length / this.heavy.length;
   }
 
   get stats() {
-    const gpu = this.clock ? quantile(this.clock.samples, 0.75) : NaN;
     return {
       tier: TIERS[this.tier].name,
       display: +this.display().toFixed(2),
       calibrated: Number.isFinite(this.vsync),
       heavyFrames: this.heavy.length,
       missRatio: this.heavy.length ? +this.missRatio().toFixed(3) : null,
-      gpuMs: Number.isFinite(gpu) ? +gpu.toFixed(2) : null,
-      jsMs: this.heavy.length ? +quantile(this.heavy.map((s) => s.js), 0.75).toFixed(2) : null,
-      clock: this.clock?.kind ?? null,
+      frameMs: this.heavy.length ? +mean(this.heavy).toFixed(2) : null,
+      jsMs: this.js.length ? +quantile(this.js, 0.5).toFixed(2) : null,
     };
   }
 
-  /** How long a frame takes now, from GPU time where known and otherwise from the frame times themselves. */
-  private cost(): { gpu: number; js: number; measured: boolean } {
-    const js = quantile(this.heavy.map((s) => s.js), 0.75);
-    const gpu = this.clock ? quantile(this.clock.samples, 0.75) : NaN;
-    if (Number.isFinite(gpu)) return { gpu, js, measured: true };
-    return { gpu: quantile(this.heavy.map((s) => s.delta), 0.5), js, measured: false };
-  }
-
-  private predict(c: { gpu: number; js: number }, to: number): number {
-    const from = TIERS[this.tier];
-    return Math.max(c.js, c.gpu * TIERS[to].gpuCost / from.gpuCost);
+  get timing(): boolean {
+    return this.calibrating > 0;
   }
 
   /**
-   * The game is at a moment when the look can change unseen. Returns the tier to switch to, or null to stay. It may
-   * first ask for a few frames drawn with nothing, to time the display on its own; ask again on the next frames.
+   * The game is at a moment when the look can change unseen; ask once per such moment. Returns the tier to switch to,
+   * or null to stay. It may first start `timing`, drawing nothing for a few frames to time the display on its own; ask
+   * again once that is done.
    */
   safeMoment(now = this.lastNow): Decision | null {
     if (this.locked || this.calibrating > 0 || this.heavy.length < ENOUGH / 2 || now - this.lastChange < 5000) return null;
     const miss = this.missRatio();
     if (this.heavy.length < ENOUGH && miss < 0.5) return null;
-    const stale = now - this.calibratedAt > CALIBRATION_TTL;
-    if (stale && (miss > SLOW || this.display() > 20)) {
+    if (now - this.calibratedAt > CALIBRATION_TTL && (miss > SLOW || this.display() > 20)) {
       this.calibrating = CALIBRATE_FRAMES;
       this.calibration = [];
       return null;
     }
-    const slot = this.slot();
-    const c = this.cost();
+    const frame = mean(this.heavy);
+    const js = quantile(this.js, 0.5);
+    const fits = (t: number) => Math.max(frame * TIERS[t].gpuCost / TIERS[this.tier].gpuCost, js) <= this.slot(t) * DOWN_MARGIN;
     if (miss > SLOW && this.tier < TIERS.length - 1) {
-      if (this.steppedUpTo === this.tier) this.upFailures[this.tier]++;
+      if (this.steppedUpTo === this.tier) this.failures[this.tier]++;
       this.steppedUpTo = -1;
+      const last = this.lastChange < 0 ? TIERS.length - 1 : Math.min(TIERS.length - 1, this.tier + 2);
       let to = this.tier + 1;
-      const most = this.lastChange < 0 ? TIERS.length - 1 : this.tier + 2;
-      while (to < Math.min(most, TIERS.length - 1) && this.predict(c, to) > this.slot(to) * DOWN_MARGIN) to++;
-      return this.change(to, now, `${(miss * 100).toFixed(0)}% of frames missed a ${slot.toFixed(1)} ms slot; frame ~${Math.max(c.gpu, c.js).toFixed(1)} ms`);
+      while (to < last && !fits(to)) to++;
+      return this.change(to, now, `${(miss * 100).toFixed(0)}% of frames missed a ${this.slot().toFixed(1)} ms slot, averaging ${frame.toFixed(1)} ms with ${js.toFixed(1)} ms of script`);
     }
-    if (miss < SMOOTH && this.tier > 0 && c.measured) {
-      const to = this.tier - 1;
-      const fit = this.predict(c, to);
-      const margin = UP_MARGIN / 2 ** this.upFailures[to];
-      if (fit < this.slot(to) * margin) {
-        const d = this.change(to, now, `frames fit (${c.gpu.toFixed(1)} ms GPU, ${c.js.toFixed(1)} ms JS); ${TIERS[to].name} predicted ${fit.toFixed(1)} ms`);
-        this.steppedUpTo = to;
-        return d;
-      }
+    this.smoothRuns = miss < SMOOTH ? this.smoothRuns + 1 : 0;
+    const to = this.tier - 1;
+    if (to >= 0 && js <= this.slot(to) * DOWN_MARGIN && this.smoothRuns >= TRIAL_AFTER * 3 ** this.failures[to]) {
+      const d = this.change(to, now, `smooth for ${this.smoothRuns} chapters, averaging ${frame.toFixed(1)} ms; trying ${TIERS[to].name} again`);
+      this.steppedUpTo = to;
+      return d;
     }
     return null;
   }
@@ -306,8 +217,9 @@ export class Governor {
   private change(to: number, now: number, reason: string): Decision {
     this.tier = to;
     this.lastChange = now;
+    this.smoothRuns = 0;
     this.heavy = [];
-    this.clock?.reset();
+    this.js = [];
     this.quiet(now);
     return { tier: to, reason };
   }

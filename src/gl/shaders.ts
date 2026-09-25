@@ -710,8 +710,8 @@ void main() {
   vec2 uv = vUV;
   if (uFlipY > 0.5) uv.y = 1.0 - uv.y;
 #ifdef BAKED
-  ivec2 sp = ivec2(gl_FragCoord.xy);
-  if (uFlipY > 0.5) sp.y = textureSize(uStaticA, 0).y - 1 - sp.y;
+  // By position, not by pixel, as drying draws into the full-size board whatever size the frame is.
+  ivec2 sp = ivec2(uv * vec2(textureSize(uStaticA, 0)));
   gStaticA = texelFetch(uStaticA, sp, 0);
   gStaticB = texelFetch(uStaticB, sp, 0);
 #endif
@@ -900,20 +900,17 @@ void main() {
 }
 `;
 
-// Resamples a dried picture to a new size: four bilinear taps spread over the new texel going down, one going up.
-const resample = (sampler: string, at: string) => `${HEADER}
+// Carries a picture to a new size: four bilinear taps spread over the new texel going down, one going up.
+export const RESAMPLE_FS = `${HEADER}
 in vec2 vUV;
-uniform highp ${sampler} uSrc;
-uniform float uLayer;
+uniform sampler2D uSrc;
 uniform vec2 uSpread;
 out vec4 outColor;
-vec4 tap(vec2 o) { return texture(uSrc, ${at}); }
+vec4 tap(vec2 o) { return texture(uSrc, vUV + o); }
 void main() {
   outColor = 0.25 * (tap(vec2(-uSpread.x, -uSpread.y)) + tap(vec2(uSpread.x, -uSpread.y)) + tap(vec2(-uSpread.x, uSpread.y)) + tap(uSpread));
 }
 `;
-export const RESAMPLE_FS = resample('sampler2D', 'vUV + o');
-export const RESAMPLE_LAYER_FS = resample('sampler2DArray', 'vec3(vUV + o, uLayer)');
 
 /** The shader with `defines` switched on; with none it is exactly the source given. */
 export function variant(src: string, defines: string[]): string {
