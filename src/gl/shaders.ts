@@ -215,6 +215,10 @@ void main() {
   vec2 drift = (fl.rg - 0.5) * 2.0;
   p += drift * uDrift * (ph - 0.5) * life * vec2(1.0 / uAspect, 1.0);
 
+  // Strokes that would be fully discarded are moved outside the clip volume, so none of their fragments or colour is computed.
+  float env = smoothstep(0.0, 0.12, ph) * (1.0 - smoothstep(0.82, 1.0, ph));
+  if (env * uOpacity < 0.004) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+
   vec2 e = vec2(2.5 / uRes.y) * vec2(1.0 / uAspect, 1.0) * max(1.0, uSize.x * 0.35);
   vec3 cL = sampleScene(p - vec2(e.x, 0.0)), cR = sampleScene(p + vec2(e.x, 0.0));
   vec3 cU = sampleScene(p - vec2(0.0, e.y)), cD = sampleScene(p + vec2(0.0, e.y));
@@ -222,6 +226,8 @@ void main() {
   float gm = length(g) + length(cR - cL) * 0.35 + length(cD - cU) * 0.35;
 
   float keep = uDetail <= 0.0 ? 1.0 : smoothstep(uDetail, uDetail * 1.8, gm);
+  vAlpha = env * keep * uOpacity;
+  if (vAlpha < 0.004) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
 
   float ang;
   float edgeW = smoothstep(0.02, 0.12, gm) * (1.0 - 0.8 * uScrub);
@@ -250,12 +256,11 @@ void main() {
   hsv.z = clamp(hsv.z * (1.0 + (h2.w - 0.5) * 0.07 * uBroken * uBroken), 0.0, 1.0);
   vColor = handColour(hsv2rgb(hsv));
 
-  float env = smoothstep(0.0, 0.12, ph) * (1.0 - smoothstep(0.82, 1.0, ph));
-  vAlpha = env * keep * uOpacity;
   vSeed = h0.z * 50.0;
 
+  // A four-vertex strip whose two triangles are the same as the old six-vertex list's.
   int vi = gl_VertexID;
-  vec2 corner = vec2((vi == 1 || vi == 2 || vi == 4) ? 1.0 : -1.0, (vi == 2 || vi == 4 || vi == 5) ? 1.0 : -1.0);
+  vec2 corner = vec2((vi == 0 || vi == 2) ? 1.0 : -1.0, vi >= 2 ? 1.0 : -1.0);
   vLocal = corner;
   vec2 offPx = mat2(dirv.x, dirv.y, -dirv.y, dirv.x) * (corner * size * 0.5);
   vec2 off = offPx / uRes;

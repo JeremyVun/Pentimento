@@ -359,7 +359,7 @@ export class Painter {
         .f('uDrift', l.drift)
         .f('uOpacity', l.opacity);
       const count = Math.min(40000, Math.round(l.count * areaK));
-      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
     });
     if (h.outline > 0) {
       gl.bindVertexArray(this.emptyVao);
