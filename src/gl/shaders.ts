@@ -480,13 +480,23 @@ uniform sampler2D uLiving;
 uniform sampler2D uPour;
 uniform float uFollow;
 uniform float uAspect;
+uniform vec4 uHolds[4];
+uniform float uHoldN;
+uniform float uSnapFrom;
 out vec4 outColor;
 void main() {
   vec4 p = texture(uPour, vUV);
   float wet = p.g * max(step(0.0005, p.r), p.b);
   float n = fbm(vUV * vec2(uAspect, 1.0) * 7.0);
   float setsAt = 0.05 + 0.32 * n;
-  float follow = max(uFollow, step(setsAt, wet));
+  float follow = step(setsAt, wet);
+  vec2 s = vUV * vec2(uAspect, 1.0);
+  for (int i = 0; i < 4; i++) {
+    if (float(i) >= uHoldN) break;
+    vec2 d = (s - uHolds[i].xy) / uHolds[i].zw;
+    if (length(d) < 1.0 + (n - 0.5) * 0.4) follow = float(i) >= uSnapFrom ? 1.0 : 0.0;
+  }
+  follow = max(uFollow, follow);
   outColor = vec4(mix(texture(uHeld, vUV).rgb, texture(uLiving, vUV).rgb, follow), 1.0);
 }
 `;

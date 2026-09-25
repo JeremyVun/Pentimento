@@ -102,6 +102,8 @@ export class Painter {
   private living: Target;
   private held: [Target, Target];
   private heldIdx = 0;
+  private holds: number[] = [];
+  private snapFrom = 0;
   private pHold: Program;
   private figuresTex: WebGLTexture;
   private ghostsTex: WebGLTexture;
@@ -285,6 +287,8 @@ export class Painter {
   }
 
   clearMask(): void {
+    this.holds = [];
+    this.snapFrom = 0;
     clearTarget(this.gl, this.mask, 0, 0, 0, 0);
     clearTarget(this.gl, this.pour[0], 0, 0, 0, 0);
     clearTarget(this.gl, this.pour[1], 0, 0, 0, 0);
@@ -380,8 +384,12 @@ export class Painter {
       .tex('uLiving', 1, this.living.tex)
       .tex('uPour', 2, this.pour[this.pourIdx].tex)
       .f('uFollow', follow)
-      .f('uAspect', ASPECT);
+      .f('uAspect', ASPECT)
+      .f('uHoldN', this.holds.length / 4)
+      .f('uSnapFrom', this.snapFrom);
+    if (this.holds.length > 0) gl.uniform4fv(this.pHold.loc('uHolds'), this.holds);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.snapFrom = this.holds.length / 4;
     this.heldIdx = 1 - this.heldIdx;
   }
 
@@ -436,19 +444,10 @@ export class Painter {
     this.decay(this.pour[this.pourIdx], 1, Math.exp(-dt * rate), Math.exp(-dt * 0.8));
   }
 
-  /** Sets the paint inside a box (scene units, y down) at once, keeping whatever it shows now. */
+  /** Holds the paint inside an ellipse (scene units, y down) at what the view shows now, however wet it still is. */
   setPaint(x: number, y: number, rx: number, ry: number): void {
-    const gl = this.gl;
-    const t = this.pour[this.pourIdx];
-    const u0 = Math.max(0, (x - rx) / ASPECT);
-    const u1 = Math.min(1, (x + rx) / ASPECT);
-    const v0 = Math.max(0, y - ry);
-    const v1 = Math.min(1, y + ry);
-    bindTarget(gl, t);
-    gl.enable(gl.SCISSOR_TEST);
-    gl.scissor(Math.floor(u0 * t.w), Math.floor(v0 * t.h), Math.ceil((u1 - u0) * t.w), Math.ceil((v1 - v0) * t.h));
-    this.decay(t, 1, 0);
-    gl.disable(gl.SCISSOR_TEST);
+    if (this.holds.length >= 16) return;
+    this.holds.push(x, y, rx * 1.35, ry * 1.35);
   }
 
   /** Drops paint at each dab; its strength is how far the paint will flow. */
