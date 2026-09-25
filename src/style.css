@@ -91,10 +91,10 @@ button {
   position: relative;
   isolation: isolate;
   margin-top: calc(var(--board-h) * 0.05);
-  font-size: calc(var(--board-h) * 0.04);
+  font-size: calc(var(--board-h) * 0.036);
   letter-spacing: 0.03em;
   padding: 0.32em 1.7em 0.4em;
-  color: var(--paper);
+  color: #3b322b;
   background: none;
   border: none;
   transition: transform 0.25s ease;
@@ -109,9 +109,9 @@ button {
   mask: var(--swatch) center / 100% 100% no-repeat;
   transition: background 0.2s ease;
 }
-.begin::before { inset: -0.1em -0.25em; transform: rotate(-1.5deg); }
+.begin::before { inset: -0.1em -0.25em; transform: rotate(-1.5deg); background: rgba(245, 234, 211, 0.84); }
 .begin:hover, .begin:focus-visible { outline: none; transform: scale(1.04); }
-.begin:hover::before, .begin:focus-visible::before { background: #5a4a3d; }
+.begin:hover::before, .begin:focus-visible::before { background: rgba(251, 244, 228, 0.95); }
 .begin:focus-visible { text-decoration: underline; text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
 
 .card {

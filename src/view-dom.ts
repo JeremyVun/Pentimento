@@ -22,18 +22,19 @@ function brushSwatch(): string {
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   g.lineCap = 'round';
   g.strokeStyle = '#000';
-  const rows = 70;
+  const rows = 90;
   for (let i = 0; i < rows; i++) {
     const t = i / (rows - 1);
     const edge = Math.abs(t - 0.5) * 2;
-    const y = 12 + t * (h - 24) + (rand() - 0.5) * 3;
-    const x0 = 10 + rand() * 12 + edge ** 3 * 40 * rand();
-    const x1 = w - 12 - rand() * 18 - edge ** 2 * 70 * rand();
-    g.globalAlpha = edge > 0.8 ? 0.5 + rand() * 0.5 : 0.85 + rand() * 0.15;
-    g.lineWidth = 2 + rand() * 3;
+    const y = 14 + t * (h - 28) + (rand() - 0.5) * 3;
+    const x0 = 8 + rand() * 28 + edge ** 2 * 60 * rand();
+    const x1 = w - 8 - rand() * 40 - edge ** 2 * 90 * rand();
+    const streak = rand() < 0.12;
+    g.globalAlpha = streak ? 0.3 + rand() * 0.2 : edge > 0.8 ? 0.45 + rand() * 0.5 : 0.75 + rand() * 0.25;
+    g.lineWidth = 1.5 + rand() * 3;
     g.beginPath();
     g.moveTo(x0, y);
-    g.lineTo(x1, y + (rand() - 0.5) * 3);
+    g.quadraticCurveTo((x0 + x1) / 2, y - 7, x1, y + (rand() - 0.5) * 4);
     g.stroke();
   }
   return `url(${c.toDataURL()})`;
