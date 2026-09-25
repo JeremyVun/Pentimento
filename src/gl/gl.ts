@@ -100,6 +100,20 @@ export function createTarget(gl: GL, w: number, h: number, linear = true, half =
   return { tex, fbo, w, h };
 }
 
+/** A single-channel 32-bit float target read with texelFetch; needs EXT_color_buffer_float. */
+export function createFloatTarget(gl: GL, w: number, h: number): Target {
+  const tex = gl.createTexture()!;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, w, h, 0, gl.RED, gl.FLOAT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  const fbo = gl.createFramebuffer()!;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fbo, w, h };
+}
+
 export function bindTarget(gl: GL, t: Target | null, w?: number, h?: number): void {
   gl.bindFramebuffer(gl.FRAMEBUFFER, t ? t.fbo : null);
   gl.viewport(0, 0, t ? t.w : w!, t ? t.h : h!);

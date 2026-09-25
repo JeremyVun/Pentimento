@@ -504,6 +504,51 @@ void main() {
 }
 `;
 
+// Pencil lines of the sketch. Static for a chapter, so the painter works them out once per sketch (SKETCH_LINE_FS).
+const SKETCH = `
+float edgeOf(sampler2D s, vec2 uv) {
+  vec2 e = 1.0 / vec2(textureSize(s, 0));
+  vec3 tl = texture(s, uv + vec2(-e.x, -e.y)).rgb;
+  vec3  t = texture(s, uv + vec2(0.0, -e.y)).rgb;
+  vec3 tr = texture(s, uv + vec2(e.x, -e.y)).rgb;
+  vec3  l = texture(s, uv + vec2(-e.x, 0.0)).rgb;
+  vec3  r = texture(s, uv + vec2(e.x, 0.0)).rgb;
+  vec3 bl = texture(s, uv + vec2(-e.x, e.y)).rgb;
+  vec3  b = texture(s, uv + vec2(0.0, e.y)).rgb;
+  vec3 br = texture(s, uv + vec2(e.x, e.y)).rgb;
+  vec3 gx = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
+  vec3 gy = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
+  return length(gx) + length(gy);
+}
+
+float sketchEdge(vec2 uv) { return edgeOf(uSketch, uv); }
+
+float sketchLineAt(vec2 uv, float tooth) {
+  vec2 j = vec2(snoise(uv * 40.0), snoise(uv * 40.0 + 9.0)) * 0.0007;
+  float e1 = sketchEdge(uv + j);
+  float e2 = sketchEdge(uv - j * 1.7 + vec2(0.0009, 0.0004));
+  float line = max(smoothstep(0.35, 0.9, e1), 0.45 * smoothstep(0.45, 1.0, e2));
+  line *= 0.5 + 0.5 * smoothstep(0.3, 0.7, vnoise(uv * uRes * vec2(0.08, 0.3)));
+  line *= 0.7 + 0.3 * tooth;
+  return line;
+}
+`;
+
+export const SKETCH_LINE_FS = `${HEADER}${NOISE}
+in vec2 vUV;
+uniform sampler2D uSketch;
+uniform sampler2D uPaper;
+uniform vec2 uRes;
+uniform float uFlipY;
+out vec4 outColor;
+${SKETCH}
+void main() {
+  vec2 uv = vUV;
+  if (uFlipY > 0.5) uv.y = 1.0 - uv.y;
+  outColor = vec4(sketchLineAt(uv, texture(uPaper, uv).r), 0.0, 0.0, 1.0);
+}
+`;
+
 // Final composite: dried layers, the living layer through the paint mask, pencil sketch, tape and paper.
 export const COMPOSITE_FS = `${HEADER}${NOISE}
 in vec2 vUV;
@@ -540,24 +585,10 @@ uniform float uFocusAmt;
 uniform vec4 uAttn;
 uniform float uAttnAmt;
 uniform float uFigBlur;
+uniform sampler2D uSketchLine;
+uniform float uHasLine;
 out vec4 outColor;
-
-float edgeOf(sampler2D s, vec2 uv) {
-  vec2 e = 1.0 / vec2(textureSize(s, 0));
-  vec3 tl = texture(s, uv + vec2(-e.x, -e.y)).rgb;
-  vec3  t = texture(s, uv + vec2(0.0, -e.y)).rgb;
-  vec3 tr = texture(s, uv + vec2(e.x, -e.y)).rgb;
-  vec3  l = texture(s, uv + vec2(-e.x, 0.0)).rgb;
-  vec3  r = texture(s, uv + vec2(e.x, 0.0)).rgb;
-  vec3 bl = texture(s, uv + vec2(-e.x, e.y)).rgb;
-  vec3  b = texture(s, uv + vec2(0.0, e.y)).rgb;
-  vec3 br = texture(s, uv + vec2(e.x, e.y)).rgb;
-  vec3 gx = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
-  vec3 gy = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
-  return length(gx) + length(gy);
-}
-
-float sketchEdge(vec2 uv) { return edgeOf(uSketch, uv); }
+${SKETCH}
 
 vec3 graphiteOver(vec3 c) {
   return mix(c * 0.58 + vec3(0.03, 0.03, 0.035), c + vec3(0.18), smoothstep(0.42, 0.2, lum(c)));
@@ -641,12 +672,17 @@ void main() {
   }
 
   if (uSketchAmt > 0.001 && uBake < 0.5) {
-    vec2 j = vec2(snoise(uv * 40.0), snoise(uv * 40.0 + 9.0)) * 0.0007;
-    float e1 = sketchEdge(uv + j);
-    float e2 = sketchEdge(uv - j * 1.7 + vec2(0.0009, 0.0004));
-    float line = max(smoothstep(0.35, 0.9, e1), 0.45 * smoothstep(0.45, 1.0, e2));
-    line *= 0.5 + 0.5 * smoothstep(0.3, 0.7, vnoise(uv * uRes * vec2(0.08, 0.3)));
-    line *= 0.7 + 0.3 * tooth;
+    float line;
+    if (uHasLine > 0.5 && uFlipY > 0.5) {
+      line = texelFetch(uSketchLine, ivec2(gl_FragCoord.xy), 0).r;
+    } else {
+      vec2 j = vec2(snoise(uv * 40.0), snoise(uv * 40.0 + 9.0)) * 0.0007;
+      float e1 = sketchEdge(uv + j);
+      float e2 = sketchEdge(uv - j * 1.7 + vec2(0.0009, 0.0004));
+      line = max(smoothstep(0.35, 0.9, e1), 0.45 * smoothstep(0.45, 1.0, e2));
+      line *= 0.5 + 0.5 * smoothstep(0.3, 0.7, vnoise(uv * uRes * vec2(0.08, 0.3)));
+      line *= 0.7 + 0.3 * tooth;
+    }
     float dl = lum(dry);
     vec3 graphite = mix(dry * 0.58 + vec3(0.03, 0.03, 0.035), dry + vec3(0.18), smoothstep(0.42, 0.2, dl));
     dry = mix(dry, graphite, clamp(line * uSketchAmt, 0.0, 1.0) * 0.72);

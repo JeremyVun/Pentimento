@@ -1,7 +1,7 @@
-import { GL, Program, Target, bindTarget, clearTarget, createTarget } from './gl';
+import { GL, Program, Target, bindTarget, clearTarget, createFloatTarget, createTarget } from './gl';
 import {
   BASE_FS, COMPOSITE_FS, DAB_FS, DAB_VS, FULLSCREEN_VS, HOLD_FS, OUTLINE_FS, PAPER_FS, POUR_DOWN_FS, POUR_SEED_FS, POUR_SEED_VS, POUR_SPREAD_FS,
-  STROKE_FS, STROKE_VS,
+  SKETCH_LINE_FS, STROKE_FS, STROKE_VS,
 } from './shaders';
 
 export const ASPECT = 1.6;
@@ -118,6 +118,9 @@ export class Painter {
   private sceneTex: WebGLTexture;
   private flowTex: WebGLTexture;
   private sketchTex: WebGLTexture;
+  /** The sketch's pencil lines as the screen shows them, worked out once per sketch; null without float targets. */
+  private sketchLine: Target | null = null;
+  private pSketchLine: Program;
   private pBase: Program;
   private pStroke: Program;
   private pDab: Program;
@@ -170,6 +173,7 @@ export class Painter {
     this.pSpread = new Program(gl, FULLSCREEN_VS, POUR_SPREAD_FS);
     this.pDown = new Program(gl, FULLSCREEN_VS, POUR_DOWN_FS);
     this.pHold = new Program(gl, FULLSCREEN_VS, HOLD_FS);
+    this.pSketchLine = new Program(gl, FULLSCREEN_VS, SKETCH_LINE_FS);
     const pPaper = new Program(gl, FULLSCREEN_VS, PAPER_FS);
 
     this.emptyVao = gl.createVertexArray()!;
@@ -210,6 +214,7 @@ export class Painter {
     this.sceneTex = this.makeInputTexture();
     this.flowTex = this.makeInputTexture();
     this.sketchTex = this.makeInputTexture();
+    if (half) this.sketchLine = createFloatTarget(gl, w, h);
     this.figuresTex = this.makeInputTexture();
     this.ghostsTex = this.makeInputTexture();
 
@@ -267,6 +272,17 @@ export class Painter {
 
   uploadSketch(src: TexImageSource): void {
     this.upload(this.sketchTex, src);
+    if (!this.sketchLine) return;
+    const gl = this.gl;
+    bindTarget(gl, this.sketchLine);
+    gl.bindVertexArray(this.emptyVao);
+    gl.disable(gl.BLEND);
+    this.pSketchLine.use()
+      .tex('uSketch', 0, this.sketchTex)
+      .tex('uPaper', 1, this.paper.tex)
+      .f('uRes', this.w, this.h)
+      .f('uFlipY', 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
   uploadFigures(src: TexImageSource): void {
@@ -596,7 +612,9 @@ export class Painter {
       .f('uFocus', ...(c.focus ?? [0, 0, 1, 1]))
       .f('uFocusAmt', c.focus ? c.focusAmt ?? 0 : 0)
       .f('uFigLines', c.figureLines ?? 1)
-      .f('uFigBlur', c.figureBlur ?? 0);
+      .f('uFigBlur', c.figureBlur ?? 0)
+      .f('uHasLine', this.sketchLine ? 1 : 0);
+    if (this.sketchLine) this.pComposite.tex('uSketchLine', 10, this.sketchLine.tex);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
