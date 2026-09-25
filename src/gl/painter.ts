@@ -6,8 +6,8 @@ import {
 
 export const ASPECT = 1.6;
 export const MAX_LAYERS = 10;
-/** Spread passes a second: a pour takes two to three seconds to flow across its shape. */
-const SPREAD_PASSES = 40;
+/** Spread passes a second: a pour takes about a second and a half to flow across its shape. */
+const SPREAD_PASSES = 100;
 export const PAPER_RGB: [number, number, number] = [0.953, 0.925, 0.868];
 
 export interface StrokeLayer {

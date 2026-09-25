@@ -77,11 +77,17 @@ What changed: each year is now painted in her hand at that age (`hand` in `src/s
 
 > yea, agreed, the paint should flow a bit slower, please try 2 to 3 seconds
 
-What changed: a click covered 16 to 18% of the board in under a second, so the board was full in five or six seconds. Now a pour takes two to three seconds to flow across its shape and reaches just as far. Spread passes run at a fixed rate (`SPREAD_PASSES`), not once per frame.
+What changed: a click covered 16 to 18% of the board in under a second, so the board was full in five or six seconds. A pour now takes longer to flow across its shape and reaches just as far. Spread passes run at a fixed rate (`SPREAD_PASSES`), not once per frame.
 
 > I just wanted to previous fill to be slower, but you changed the style of the fill as well
 
 A first attempt also roughened the spreading edge into lobes. Jeremy wanted only the speed changed, so the fill looks exactly as it did before, just slower.
+
+At two to three seconds the spreading paint showed as a many-sided shape, which the old speed had hidden.
+
+> oh ok, then you can increase the speed a bit so it doesn't show. just not as fast as before..
+
+Settled at 100 passes a second: a pour takes about 1.3 seconds, against under one before and 2.5 at the slowest.
 
 ## Polish after the merge (2026-09-25)
 
