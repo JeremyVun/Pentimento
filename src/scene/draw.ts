@@ -1,7 +1,7 @@
 import { SceneConfig, Palette } from './config';
 import { A, BRIDGE, FIG_BASE, REGION, WALL_Y, WILLOW_BASE, gardenRight, riverBanks, riverSpan } from './geometry';
 import {
-  Pt, circle, clamp, css, ellipse, hash, hex, lerp, mixHex, mixRGB, mulberry, poly, shade, smooth, withAlpha, xAtY,
+  Pt, circle, clamp, css, ellipse, hash, hex, lerp, mixHex, mixRGB, mulberry, poly, replay, shade, smooth, withAlpha, xAtY,
 } from './util';
 import { drawBirds, drawBridgeFigures, drawGardenFigures, drawRiverFigures, drawTrain, drawWeather, drawWindow, ferryX } from './actors';
 
@@ -27,11 +27,11 @@ export function drawScene(ctx: CanvasRenderingContext2D, H: number, f: Frame): v
   sky(ctx, f);
   clouds(ctx, f);
   R(REGION.hills);
-  hills(ctx, c.pal, c);
+  replay(ctx, c.pal, c.snow ? 'hills-snow' : 'hills', (x) => hills(x, c.pal, c));
   if (c.town >= 1.35) turbines(ctx, f);
   drawTrain(ctx, f);
   R(REGION.fields);
-  farBank(ctx, c.pal, c);
+  replay(ctx, c.pal, c.cherry ? 'farBank-cherry' : 'farBank', (x) => farBank(x, c.pal, c));
   R(REGION.rightBank);
   rightLand(ctx, f);
   R(REGION.town);

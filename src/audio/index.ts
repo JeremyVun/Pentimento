@@ -11,6 +11,8 @@ export type ScoreId =
   | 'fortyfour' | 'fortynine' | 'seventytwo' | 'eightysix' | 'later' | 'lift';
 
 export interface AudioEngine {
+  /** Starts making every score's buffers in the background before the first gesture; `unlock` does it otherwise. */
+  warm(): void;
   unlock(): Promise<void>;
   play(id: ScoreId, durationSec?: number): void;
   endChapter(): void;
@@ -100,6 +102,13 @@ export function createAudioEngine(): AudioEngine {
   }
 
   const engine: AudioEngine = {
+    warm() {
+      if (warmer) return;
+      warmer = new Warmer();
+      warmer.request(LOOP_IDS.map((id) => ({ kind: 'loop', id, n: 0 })));
+      for (const sid of SCORE_IDS) warmer.request(compositionAssets(compose(sid)));
+    },
+
     async unlock() {
       if (!ctx) {
         ctx = new AudioContext({ latencyHint: 'interactive' });
@@ -110,9 +119,7 @@ export function createAudioEngine(): AudioEngine {
         if (ducked) synth.duck(true, ctx.currentTime);
         document.addEventListener('visibilitychange', onVisibility);
         setInterval(tick, TICK_MS);
-        warmer = new Warmer();
-        warmer.request(LOOP_IDS.map((id) => ({ kind: 'loop', id, n: 0 })));
-        for (const sid of SCORE_IDS) warmer.request(compositionAssets(compose(sid)));
+        engine.warm();
       }
       if (ctx.state !== 'running' && !document.hidden) await ctx.resume();
       if (pending) {
