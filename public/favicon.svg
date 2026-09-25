@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <g transform="rotate(-14 16 16)">
-    <path d="M3.6 16.4c.3-4.6 5.4-7.6 12.2-7.8 6.9-.2 12.5 2.3 12.6 6.8.1 4.9-5.5 8.1-12.6 8.1-7.2 0-12.5-2.6-12.2-7.1z" fill="#c25a3d"/>
-    <path d="M6.5 13.6c5.2-1.6 12.6-1.8 18.6-.2M5.8 18.2c6 1.3 13.2 1.3 20-.4" fill="none" stroke="#d9785a" stroke-width="1.3" stroke-linecap="round" opacity="0.7"/>
-  </g>
+  <clipPath id="d"><path id="p" d="M3.4 17.6C2 12.2 7.2 6.8 14.6 6c7-.8 13.8 1.8 14.5 7 .7 4.8-2.8 10.1-9.6 11.8-3.2.8-5 1.5-8 1C7 25 4.4 21.3 3.4 17.6z"/></clipPath>
+  <use href="#p" fill="#c25a3d"/>
+  <use href="#p" clip-path="url(#d)" fill="none" stroke="#a3452e" stroke-width="2" stroke-opacity="0.5"/>
 </svg>
