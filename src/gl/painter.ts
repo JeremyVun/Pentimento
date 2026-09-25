@@ -147,7 +147,6 @@ export class Painter {
   private coverageBytes = new Uint8Array(160 * 100 * 4);
   private pourPbo: WebGLBuffer;
   private pourFence: WebGLSync | null = null;
-  private pourStale = false;
 
   constructor(readonly canvas: HTMLCanvasElement, width: number) {
     const gl = canvas.getContext('webgl2', {
@@ -313,7 +312,8 @@ export class Painter {
   }
 
   clearMask(): void {
-    if (this.pourFence) this.pourStale = true;
+    if (this.pourFence) this.gl.deleteSync(this.pourFence);
+    this.pourFence = null;
     this.holds = [];
     this.snapFrom = 0;
     clearTarget(this.gl, this.mask, 0, 0, 0, 0);
@@ -566,7 +566,6 @@ export class Painter {
     gl.readPixels(0, 0, this.coverageW, this.coverageH, gl.RGBA, gl.UNSIGNED_BYTE, 0);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     this.pourFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-    this.pourStale = false;
     gl.flush();
     return true;
   }
@@ -578,7 +577,6 @@ export class Painter {
     if (!fence || gl.clientWaitSync(fence, 0, 0) === gl.TIMEOUT_EXPIRED) return null;
     gl.deleteSync(fence);
     this.pourFence = null;
-    if (this.pourStale) return null;
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pourPbo);
     gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.coverageBytes);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);

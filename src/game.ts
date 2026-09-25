@@ -68,7 +68,6 @@ export class Game {
   private idleT = 0;
   private sinceGone = 0;
   private hintShown = false;
-  private checkT = 0;
   private pulse: { x: number; y: number; rx: number; ry: number; t: number } | null = null;
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private sceneScale = 0.62;
@@ -340,10 +339,8 @@ export class Game {
         this.readT -= dt;
         if (this.readT <= 0 && this.painter.requestPourRead()) this.readT = 0.2;
         const poured = this.painter.takePourRead();
-        if (poured) this.coverage.setPoured(poured);
-        this.checkT -= dt;
-        if (this.checkT <= 0) {
-          this.checkT = 0.2;
+        if (poured) {
+          this.coverage.setPoured(poured);
           for (const s of ch.subjects) {
             if (this.wakeTimes[s.id] !== undefined) continue;
             if (this.coverage.ellipse(s.x, s.y, s.rx, s.ry) >= WAKE_AT) {
