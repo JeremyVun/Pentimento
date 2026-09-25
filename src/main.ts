@@ -28,9 +28,9 @@ function start(): void {
     view.fatal(UI.noWebgl);
     return;
   }
+  // ?quality=<tier name or number> pins a tier, for QA.
   const forced = tierNamed(params.get('quality'));
   if (forced > 0) painter.setLook(TIERS[forced].look);
-  // ?quality=<tier name or number> pins a tier, for QA.
   const governor = new Governor(Math.max(0, forced), forced >= 0);
   const audio = createAudioEngine();
   let stopped = false;

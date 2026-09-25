@@ -73,7 +73,10 @@ export class Governor {
   tier: number;
   /** Time between drawn frames that rendered the full living view, the work the tiers change. */
   private heavy: number[] = [];
-  /** Main-thread time of those same frames. No tier shortens it except half rate, so a frame never takes less. */
+  /**
+   * Script time of those same frames. No tier shortens it but half rate, so it bars trying a tier it can't fit. It only
+   * means that while frames keep up: when the GPU falls behind, its backlog stalls the script too.
+   */
   private js: number[] = [];
   /** Time between animation frames of any kind, for a first guess at the display's rate. */
   private deltas: number[] = [];
@@ -182,9 +185,9 @@ export class Governor {
   /**
    * The game is at a moment when the look can change unseen; ask once per such moment. Returns the tier to switch to,
    * or null to stay. It may first start `timing`, drawing nothing for a few frames to time the display on its own; ask
-   * again once that is done.
+   * again once that is done. `trial` is false when a failed trial couldn't be undone before the end.
    */
-  safeMoment(now = this.lastNow): Decision | null {
+  safeMoment(trial = true, now = this.lastNow): Decision | null {
     if (this.locked || this.calibrating > 0 || this.heavy.length < ENOUGH / 2 || now - this.lastChange < 5000) return null;
     const miss = this.missRatio();
     if (this.heavy.length < ENOUGH && miss < 0.5) return null;
@@ -195,19 +198,19 @@ export class Governor {
     }
     const frame = mean(this.heavy);
     const js = quantile(this.js, 0.5);
-    const fits = (t: number) => Math.max(frame * TIERS[t].gpuCost / TIERS[this.tier].gpuCost, js) <= this.slot(t) * DOWN_MARGIN;
+    const fits = (t: number) => frame * TIERS[t].gpuCost / TIERS[this.tier].gpuCost <= this.slot(t) * DOWN_MARGIN;
     if (miss > SLOW && this.tier < TIERS.length - 1) {
       if (this.steppedUpTo === this.tier) this.failures[this.tier]++;
       this.steppedUpTo = -1;
       const last = this.lastChange < 0 ? TIERS.length - 1 : Math.min(TIERS.length - 1, this.tier + 2);
       let to = this.tier + 1;
       while (to < last && !fits(to)) to++;
-      return this.change(to, now, `${(miss * 100).toFixed(0)}% of frames missed a ${this.slot().toFixed(1)} ms slot, averaging ${frame.toFixed(1)} ms with ${js.toFixed(1)} ms of script`);
+      return this.change(to, now, `${(miss * 100).toFixed(0)}% of frames missed a ${this.slot().toFixed(1)} ms slot, averaging ${frame.toFixed(1)} ms`);
     }
     this.smoothRuns = miss < SMOOTH ? this.smoothRuns + 1 : 0;
     const to = this.tier - 1;
-    if (to >= 0 && js <= this.slot(to) * DOWN_MARGIN && this.smoothRuns >= TRIAL_AFTER * 3 ** this.failures[to]) {
-      const d = this.change(to, now, `smooth for ${this.smoothRuns} chapters, averaging ${frame.toFixed(1)} ms; trying ${TIERS[to].name} again`);
+    if (trial && to >= 0 && js <= this.slot(to) * DOWN_MARGIN && this.smoothRuns >= TRIAL_AFTER * 3 ** this.failures[to]) {
+      const d = this.change(to, now, `smooth for ${this.smoothRuns} chapters with ${js.toFixed(1)} ms of script a frame; trying ${TIERS[to].name}`);
       this.steppedUpTo = to;
       return d;
     }

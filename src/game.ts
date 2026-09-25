@@ -349,7 +349,7 @@ export class Game {
         const settled = Number.isFinite(e);
         // Under the wash, before the pencil starts, nothing is wet and the board barely shows: the one time the look may change.
         if (this.governor && !this.tierAsked && t >= 0.9 && (!settled || t < e - 2.4)) {
-          const d = this.governor.safeMoment();
+          const d = this.governor.safeMoment(this.chapterIndex < CHAPTERS.length - 1);
           this.tierAsked = !this.governor.timing;
           if (d) this.applyTier(d.tier, d.reason);
         }
