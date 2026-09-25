@@ -102,8 +102,6 @@ export class Game {
     private tier = 0,
   ) {
     this.sceneCanvas = document.createElement('canvas');
-    this.sceneCanvas.width = Math.round(painter.baseW * this.sceneScale);
-    this.sceneCanvas.height = Math.round(painter.baseH * this.sceneScale);
     this.sceneCtx = this.sceneCanvas.getContext('2d', { alpha: false })!;
     this.flowCanvas = document.createElement('canvas');
     this.flowCanvas.width = 256;
@@ -112,12 +110,8 @@ export class Game {
     this.sketchCanvas.width = painter.baseW;
     this.sketchCanvas.height = painter.baseH;
     this.figuresCanvas = document.createElement('canvas');
-    this.figuresCanvas.width = this.sceneCanvas.width;
-    this.figuresCanvas.height = this.sceneCanvas.height;
     this.ghostsCanvas = document.createElement('canvas');
-    this.ghostsCanvas.width = this.sceneCanvas.width;
-    this.ghostsCanvas.height = this.sceneCanvas.height;
-
+    this.sizeCanvases();
     this.regionCanvas = document.createElement('canvas');
     this.regionCanvas.width = Math.round(painter.baseW / 2);
     this.regionCanvas.height = Math.round(painter.baseH / 2);
@@ -159,10 +153,23 @@ export class Game {
   /** Whether the last frame rendered the full living view, the work the quality tiers are judged on. */
   heavy = false;
 
+  /** The living view is drawn at the tier's resolution. */
+  private sizeCanvases(): void {
+    const p = this.painter;
+    const scale = p.currentLook.scale;
+    const w = Math.round(p.baseW * this.sceneScale * scale);
+    const h = Math.round(p.baseH * this.sceneScale * scale);
+    for (const c of [this.sceneCanvas, this.figuresCanvas, this.ghostsCanvas]) {
+      if (c.width !== w) c.width = w;
+      if (c.height !== h) c.height = h;
+    }
+  }
+
   private applyTier(i: number, reason: string): void {
     const from = TIERS[this.tier].name;
     this.tier = i;
     this.painter.setLook(TIERS[i].look);
+    this.sizeCanvases();
     console.debug(`[quality] ${from} -> ${TIERS[i].name} (${this.painter.w}x${this.painter.h}): ${reason}`);
   }
 

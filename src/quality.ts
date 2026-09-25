@@ -8,18 +8,18 @@ export interface Tier {
   strokes: number;
   /** Draws at most 30 frames a second. */
   halfRate: boolean;
-  /** GPU time per frame relative to the full tier, measured while pouring (see tools/README.md). */
+  /** GPU time per frame relative to the full tier, measured pouring at 1800x1125 on an M4 Pro with the GPU saturated. */
   gpuCost: number;
 }
 
 export const TIERS: Tier[] = [
   { name: 'full', look: { scale: 1, baked: false, lean: false }, strokes: 1, halfRate: false, gpuCost: 1 },
-  { name: 'baked', look: { scale: 1, baked: true, lean: false }, strokes: 1, halfRate: false, gpuCost: 0.8 },
-  { name: 'fine', look: { scale: 0.84, baked: true, lean: false }, strokes: 1, halfRate: false, gpuCost: 0.66 },
-  { name: 'soft', look: { scale: 0.7, baked: true, lean: false }, strokes: 1, halfRate: false, gpuCost: 0.54 },
-  { name: 'lean', look: { scale: 0.7, baked: true, lean: true }, strokes: 0.7, halfRate: false, gpuCost: 0.48 },
-  { name: 'low', look: { scale: 0.58, baked: true, lean: true }, strokes: 0.6, halfRate: false, gpuCost: 0.4 },
-  { name: 'half', look: { scale: 0.58, baked: true, lean: true }, strokes: 0.6, halfRate: true, gpuCost: 0.4 },
+  { name: 'baked', look: { scale: 1, baked: true, lean: false }, strokes: 1, halfRate: false, gpuCost: 0.78 },
+  { name: 'fine', look: { scale: 0.84, baked: true, lean: false }, strokes: 1, halfRate: false, gpuCost: 0.67 },
+  { name: 'soft', look: { scale: 0.7, baked: true, lean: false }, strokes: 1, halfRate: false, gpuCost: 0.57 },
+  { name: 'lean', look: { scale: 0.7, baked: true, lean: true }, strokes: 0.7, halfRate: false, gpuCost: 0.55 },
+  { name: 'low', look: { scale: 0.58, baked: true, lean: true }, strokes: 0.6, halfRate: false, gpuCost: 0.5 },
+  { name: 'half', look: { scale: 0.58, baked: true, lean: true }, strokes: 0.6, halfRate: true, gpuCost: 0.5 },
 ];
 
 export function tierNamed(name: string | null): number {

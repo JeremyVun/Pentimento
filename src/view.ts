@@ -20,8 +20,8 @@ export function runViewer(params: URLSearchParams): void {
   if (tier !== TIERS[0]) painter.setLook(tier.look);
   const sceneScale = 0.62;
   const sc = document.createElement('canvas');
-  sc.width = Math.round(painter.baseW * sceneScale);
-  sc.height = Math.round(painter.baseH * sceneScale);
+  sc.width = Math.round(painter.baseW * sceneScale * tier.look.scale);
+  sc.height = Math.round(painter.baseH * sceneScale * tier.look.scale);
   const sctx = sc.getContext('2d')!;
   const fc = document.createElement('canvas');
   fc.width = 256;
@@ -29,8 +29,8 @@ export function runViewer(params: URLSearchParams): void {
   drawFlow(fc.getContext('2d')!, 160, cfg);
   painter.uploadFlow(fc);
   const sk = document.createElement('canvas');
-  sk.width = sc.width;
-  sk.height = sc.height;
+  sk.width = Math.round(painter.baseW * sceneScale);
+  sk.height = Math.round(painter.baseH * sceneScale);
   drawScene(sk.getContext('2d')!, sk.height, { cfg, t: 0, sketch: true, woke: {} });
   painter.uploadSketch(sk);
   const mask = params.get('mask') || 'full';
