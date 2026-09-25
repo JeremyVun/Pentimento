@@ -32,6 +32,8 @@ function start(): void {
     view.fatal(UI.contextLost);
   });
   const audio = createAudioEngine();
+  // Make the instrument buffers while the title shows, so Begin doesn't have to synthesise the first ones on the spot.
+  setTimeout(() => audio.warm(), 1500);
   view.onMute = (m) => audio.setMuted(m);
   const brush = new Brush(view.board);
   const narration = new Narration(view.narrationRoot);
