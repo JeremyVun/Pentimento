@@ -304,6 +304,8 @@ export const UI = {
   again: 'Start again',
   mute: 'Mute',
   unmute: 'Unmute',
+  fullscreen: 'Full screen',
+  exitFullscreen: 'Exit full screen',
   contextLost: 'The graphics card was reset. Reload the page to carry on.',
   noWebgl: "This game needs WebGL 2, which your browser doesn't support. Try a recent version of Chrome, Firefox or Safari.",
 };
