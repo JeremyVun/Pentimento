@@ -21,8 +21,10 @@ const SETTLE = 2.6;
 const REFLECT_NOTES = 6;
 /** How fast poured paint dries while painting. Wet paint moves with the view; dry paint keeps its moment. */
 const DRY_RATE = 0.06;
-/** How fast a pour's reach grows: a click's paint takes about 1.3 seconds to reach as far as it will go. */
+/** How much further paint reaches for each second the button is held. */
 const REACH_PER_SEC = 0.4;
+/** A quick click still leaves a small pool. */
+const CLICK_REACH = 0.06;
 /** Seconds after a moment is caught before the paint around it sets, holding it mid-wave. */
 const SETS_AFTER: Record<string, number> = { joe: 3.5, ferry: 2.5, train: 0.8, bus: 2, robin: 2.6 };
 
@@ -45,8 +47,6 @@ export class Game {
   private sketchCanvas: HTMLCanvasElement;
   private regionCanvas: HTMLCanvasElement;
   private pourHeld = 0;
-  /** Paint dropped recently, each reaching further until it has the reach it was poured with. */
-  private drops: { x: number; y: number; reach: number; target: number; fed: boolean }[] = [];
   private readT = 0;
   private coverage = new Coverage();
   private liftGrid = new Coverage();
@@ -253,7 +253,6 @@ export class Game {
     for (const m of ch.moments ?? []) this.moments[m.id] = { state: 'waiting', set: false };
     this.bellRung = false;
     this.paintLeft = ch.paint ?? Infinity;
-    this.drops = [];
     this.finishAt = Infinity;
     this.brush.scale = ch.brush ?? 1;
     this.living = 1;
@@ -584,9 +583,9 @@ export class Game {
   private wasDown = false;
   private finishAt = Infinity;
 
-  /** How far paint poured now will flow; holding the button pours more. */
+  /** How far the paint from this press has reached so far. */
   private get pourBudget(): number {
-    return Math.min(1.6, 0.5 + this.pourHeld * 0.5) * (this.chapter?.brush ?? 1);
+    return Math.min(1.6, this.pourHeld * REACH_PER_SEC) * (this.chapter?.brush ?? 1);
   }
 
   private applyPour(dabs: Dab[], dt: number): void {
@@ -594,7 +593,6 @@ export class Game {
       this.pourHeld = 0;
       if (this.wasDown) this.audio.brushUp();
       this.wasDown = false;
-      this.growDrops(dt);
       this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3);
       return;
     }
@@ -602,10 +600,9 @@ export class Game {
       this.paintLeft -= dt;
       if (this.paintLeft <= 0) this.finishAt = this.phaseT + 2.5;
       this.pourHeld += dt;
-      const budget = this.pourBudget;
-      const at = dabs.filter((_, i) => i % 3 === 0).map((d) => ({ x: d.x, y: d.y }));
-      if (at.length === 0) at.push({ x: this.brush.x, y: this.brush.y });
-      for (const a of at) this.feedDrop(a.x, a.y, budget);
+      const at = dabs.length ? dabs : [{ x: this.brush.x, y: this.brush.y, r: 0, strength: 0, angle: 0, seed: 1 }];
+      const add = ((REACH_PER_SEC * dt + (this.wasDown ? 0 : CLICK_REACH)) * (this.chapter?.brush ?? 1)) / at.length;
+      this.painter.pourAdd(at.map((d) => ({ ...d, r: 0.016, strength: add })), 0.1 + this.pourBudget);
       this.pourOnMoments();
       this.audio.brush(this.brush.x, this.brush.y, Math.max(this.brush.speed, 0.5));
     } else {
@@ -613,31 +610,7 @@ export class Game {
       if (this.wasDown) this.audio.brushUp();
     }
     this.wasDown = this.brush.down;
-    this.growDrops(dt);
     this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3);
-  }
-
-  private feedDrop(x: number, y: number, target: number): void {
-    const near = this.drops.find((d) => Math.abs(d.x - x) < 0.012 && Math.abs(d.y - y) < 0.012);
-    if (near) {
-      near.target = Math.max(near.target, target);
-      near.fed = true;
-    } else if (this.drops.length < 600) {
-      this.drops.push({ x, y, reach: 0, target, fed: true });
-    }
-  }
-
-  /** Paint reaches further over a second or so rather than all at once, so its edge creeps out round and ragged. */
-  private growDrops(dt: number): void {
-    if (this.drops.length === 0) return;
-    const seeds: Dab[] = [];
-    for (const d of this.drops) {
-      d.reach = Math.min(d.target, d.reach + REACH_PER_SEC * dt);
-      seeds.push({ x: d.x, y: d.y, r: 0.016, strength: d.reach, angle: 0, seed: 1 });
-    }
-    this.painter.pourSeed(seeds);
-    this.drops = this.drops.filter((d) => d.reach < d.target || d.fed);
-    for (const d of this.drops) d.fed = false;
   }
 
   private applyLift(dabs: Dab[], dt: number): void {

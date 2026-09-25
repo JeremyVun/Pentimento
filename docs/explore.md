@@ -93,6 +93,10 @@ Settled at 100 passes a second: a pour takes about 1.3 seconds, against under on
 
 A moving mouse drops paint in many places, and the overlapping patches hide the shape. A still one shows the shape of the spread itself. So paint spreads at the old speed again, and each drop's reach grows over about a second and a half instead (`REACH_PER_SEC` in `src/game.ts`). The visible edge is then the reach limit, which is round and ragged like the edges of the original fills. Speed, reach and the finished fill are unchanged.
 
+> I feel like the paint should stop filling whne the player stops holding their mouse button down
+
+Paint now flows only while the button is held (`pourAdd` in `src/gl/painter.ts`, `REACH_PER_SEC` in `src/game.ts`). Holding adds to the paint already under the cursor, so holding on old paint pushes it further straight away. A click leaves a small pool (`CLICK_REACH`), a second's hold covers about as much as a click used to, and a drag leaves a band of paint. Spread passes run at 360 a second so the paint keeps up and stops within a moment of letting go. The first hint now says to hold the button down.
+
 ## Polish after the merge (2026-09-25)
 
 - Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.

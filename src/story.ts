@@ -294,8 +294,8 @@ export const CHAPTERS: Chapter[] = [
 export const UI = {
   begin: 'Begin',
   rotate: 'Turn your phone sideways for a bigger painting.',
-  hintMouse: 'Click to pour paint, or hold to pour more.',
-  hintTouch: 'Tap to pour paint, or hold to pour more.',
+  hintMouse: 'Hold the mouse button down to pour paint.',
+  hintTouch: 'Touch and hold to pour paint.',
   catchMouse: 'Click on the ferry to paint it in before it goes.',
   catchTouch: 'Tap the ferry to paint it in before it goes.',
   finish: 'Finish painting',

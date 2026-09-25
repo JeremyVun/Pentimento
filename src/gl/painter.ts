@@ -6,8 +6,8 @@ import {
 
 export const ASPECT = 1.6;
 export const MAX_LAYERS = 10;
-/** Spread passes a second, so paint flows at the same speed whatever the display's frame rate. */
-const SPREAD_PASSES = 170;
+/** Spread passes a second: enough that paint keeps up with the pour and stops soon after the button is let go. */
+const SPREAD_PASSES = 360;
 export const PAPER_RGB: [number, number, number] = [0.953, 0.925, 0.868];
 
 export interface StrokeLayer {
@@ -455,6 +455,10 @@ export class Painter {
 
   /** Drops paint at each dab; its strength is how far the paint will flow. */
   pourSeed(dabs: Dab[], anyRegion = false): void {
+    this.seedPass(dabs, this.gl.MAX, anyRegion);
+  }
+
+  private seedPass(dabs: Dab[], equation: number, anyRegion = false): void {
     if (dabs.length === 0) return;
     const gl = this.gl;
     const n = Math.min(dabs.length, this.dabData.length / 6);
@@ -467,7 +471,8 @@ export class Painter {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.dabBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.dabData, 0, n * 6);
     gl.enable(gl.BLEND);
-    gl.blendEquation(gl.MAX);
+    gl.blendEquation(equation);
+    gl.blendFunc(gl.ONE, gl.ONE);
     this.pSeed.use().f('uRes', this.pour[0].w, this.pour[0].h).tex('uRegion', 0, this.regionTex).f('uAnyRegion', anyRegion ? 1 : 0);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, n);
     gl.blendEquation(gl.FUNC_ADD);
@@ -475,10 +480,20 @@ export class Painter {
     gl.bindVertexArray(this.emptyVao);
   }
 
+  /** Pours more paint at each dab while the button is held: it adds to the paint already there, so holding on old paint pushes it further. `fresh` is how far that paint re-wets what it runs into. */
+  pourAdd(dabs: Dab[], fresh: number): void {
+    const gl = this.gl;
+    gl.colorMask(true, false, false, false);
+    this.seedPass(dabs, gl.FUNC_ADD);
+    gl.colorMask(false, true, false, true);
+    this.seedPass(dabs.map((d) => ({ ...d, strength: fresh })), gl.MAX);
+    gl.colorMask(true, true, true, true);
+  }
+
   /** Lets poured paint flow on through its region. */
   pourSpread(dt: number, seed: number): void {
     const gl = this.gl;
-    this.spreadDue = Math.min(5, this.spreadDue + dt * SPREAD_PASSES);
+    this.spreadDue = Math.min(8, this.spreadDue + dt * SPREAD_PASSES);
     const passes = Math.floor(this.spreadDue);
     this.spreadDue -= passes;
     gl.bindVertexArray(this.emptyVao);
