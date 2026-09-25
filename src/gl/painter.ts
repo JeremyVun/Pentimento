@@ -113,7 +113,7 @@ export class Painter {
   private lift: Target;
   private dry: [Target, Target];
   private dryIdx = 0;
-  private exportTarget: Target;
+  private exportTarget: Target | null = null;
   private snaps: WebGLTexture;
   private sceneTex: WebGLTexture;
   private flowTex: WebGLTexture;
@@ -141,6 +141,9 @@ export class Painter {
   readonly coverageW = 160;
   readonly coverageH = 100;
   private coverageBytes = new Uint8Array(160 * 100 * 4);
+  private pourPbo: WebGLBuffer;
+  private pourFence: WebGLSync | null = null;
+  private pourStale = false;
 
   constructor(readonly canvas: HTMLCanvasElement, width: number) {
     const gl = canvas.getContext('webgl2', {
@@ -191,11 +194,14 @@ export class Painter {
     this.mask = createTarget(gl, w, h, true, half);
     this.lift = createTarget(gl, w, h, true, half);
     this.dry = [createTarget(gl, w, h), createTarget(gl, w, h)];
-    this.exportTarget = createTarget(gl, w, h);
     const pw = Math.round(w / 2);
     const ph = Math.round(h / 2);
     this.pour = [createTarget(gl, pw, ph, true, half), createTarget(gl, pw, ph, true, half)];
     this.pourDown = createTarget(gl, this.coverageW, this.coverageH);
+    this.pourPbo = gl.createBuffer()!;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pourPbo);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, this.coverageBytes.byteLength, gl.STREAM_READ);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     this.regionTex = this.makeInputTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.regionTex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -290,6 +296,7 @@ export class Painter {
   }
 
   clearMask(): void {
+    if (this.pourFence) this.pourStale = true;
     this.holds = [];
     this.snapFrom = 0;
     clearTarget(this.gl, this.mask, 0, 0, 0, 0);
@@ -396,20 +403,25 @@ export class Painter {
     this.heldIdx = 1 - this.heldIdx;
   }
 
+  private packDabs(dabs: Dab[], n: number): void {
+    const a = this.dabData;
+    for (let i = 0; i < n; i++) {
+      const d = dabs[i];
+      const o = i * 6;
+      a[o] = d.x;
+      a[o + 1] = d.y;
+      a[o + 2] = d.r;
+      a[o + 3] = d.strength;
+      a[o + 4] = d.angle;
+      a[o + 5] = d.seed;
+    }
+  }
+
   private drawDabs(target: Target, dabs: Dab[], wet: number): void {
     if (dabs.length === 0) return;
     const gl = this.gl;
     const n = Math.min(dabs.length, this.dabData.length / 6);
-    for (let i = 0; i < n; i++) {
-      const d = dabs[i];
-      const o = i * 6;
-      this.dabData[o] = d.x;
-      this.dabData[o + 1] = d.y;
-      this.dabData[o + 2] = d.r;
-      this.dabData[o + 3] = d.strength;
-      this.dabData[o + 4] = d.angle;
-      this.dabData[o + 5] = d.seed;
-    }
+    this.packDabs(dabs, n);
     bindTarget(gl, target);
     gl.bindVertexArray(this.dabVao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.dabBuf);
@@ -458,10 +470,7 @@ export class Painter {
     if (dabs.length === 0) return;
     const gl = this.gl;
     const n = Math.min(dabs.length, this.dabData.length / 6);
-    for (let i = 0; i < n; i++) {
-      const d = dabs[i];
-      this.dabData.set([d.x, d.y, d.r, d.strength, d.angle, d.seed], i * 6);
-    }
+    this.packDabs(dabs, n);
     bindTarget(gl, this.pour[this.pourIdx]);
     gl.bindVertexArray(this.dabVao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.dabBuf);
@@ -499,15 +508,48 @@ export class Painter {
     }
   }
 
-  /** Coarse painted/unpainted map of poured paint, one byte per cell, rows from the top. */
-  readPour(): Uint8Array {
+  private drawPourDown(): void {
     const gl = this.gl;
     bindTarget(gl, this.pourDown);
     gl.bindVertexArray(this.emptyVao);
     gl.disable(gl.BLEND);
     this.pDown.use().tex('uPour', 0, this.pour[this.pourIdx].tex);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /** Coarse painted/unpainted map of poured paint, one byte per cell, rows from the top. Waits for the GPU. */
+  readPour(): Uint8Array {
+    const gl = this.gl;
+    this.drawPourDown();
     gl.readPixels(0, 0, this.coverageW, this.coverageH, gl.RGBA, gl.UNSIGNED_BYTE, this.coverageBytes);
+    return this.coverageBytes;
+  }
+
+  /** Starts copying the coarse pour map back without waiting for the GPU; `takePourRead` collects it a frame or two later. */
+  requestPourRead(): boolean {
+    if (this.pourFence) return false;
+    const gl = this.gl;
+    this.drawPourDown();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pourPbo);
+    gl.readPixels(0, 0, this.coverageW, this.coverageH, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this.pourFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    this.pourStale = false;
+    gl.flush();
+    return true;
+  }
+
+  /** The pour map from the last `requestPourRead` once the GPU has finished it, else null. */
+  takePourRead(): Uint8Array | null {
+    const gl = this.gl;
+    const fence = this.pourFence;
+    if (!fence || gl.clientWaitSync(fence, 0, 0) === gl.TIMEOUT_EXPIRED) return null;
+    gl.deleteSync(fence);
+    this.pourFence = null;
+    if (this.pourStale) return null;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pourPbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.coverageBytes);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     return this.coverageBytes;
   }
 
@@ -581,6 +623,7 @@ export class Painter {
 
   async exportPNG(c: CompositeParams): Promise<Blob> {
     const gl = this.gl;
+    this.exportTarget ??= createTarget(gl, this.w, this.h);
     this.compositeInto(this.exportTarget, c, false);
     const px = new Uint8Array(this.w * this.h * 4);
     gl.readPixels(0, 0, this.w, this.h, gl.RGBA, gl.UNSIGNED_BYTE, px);

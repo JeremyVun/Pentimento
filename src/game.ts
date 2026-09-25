@@ -325,10 +325,9 @@ export class Game {
         this.applyPour(dabs, dt);
         this.painter.dryMask(dt, DRY_RATE * handOf(this.cfg).dry);
         this.readT -= dt;
-        if (this.readT <= 0) {
-          this.readT = 0.2;
-          this.coverage.setPoured(this.painter.readPour());
-        }
+        if (this.readT <= 0 && this.painter.requestPourRead()) this.readT = 0.2;
+        const poured = this.painter.takePourRead();
+        if (poured) this.coverage.setPoured(poured);
         this.checkT -= dt;
         if (this.checkT <= 0) {
           this.checkT = 0.2;
