@@ -94,3 +94,39 @@ export function xAtY(pts: Pt[], y: number): number {
   }
   return pts[pts.length - 1][0];
 }
+
+type Op = { call: string; args: unknown[] } | { set: string; value: unknown };
+const recordings = new WeakMap<object, Map<string, Op[]>>();
+
+/**
+ * Draws something that never changes for a given key and id by replaying the canvas calls it made the first time,
+ * skipping its arithmetic, colour strings and garbage. `id` names the drawing and anything else it depends on;
+ * `draw` must not read back from the context.
+ */
+export function replay(ctx: CanvasRenderingContext2D, key: object, id: string, draw: (ctx: CanvasRenderingContext2D) => void): void {
+  let byId = recordings.get(key);
+  if (!byId) recordings.set(key, (byId = new Map()));
+  let ops = byId.get(id);
+  if (!ops) {
+    const rec: Op[] = [];
+    const recorder = new Proxy(ctx, {
+      get(target, prop) {
+        const v = Reflect.get(target, prop, target);
+        if (typeof v !== 'function') return v;
+        if (prop === 'createLinearGradient' || prop === 'createRadialGradient') return v.bind(target);
+        return (...args: unknown[]) => { rec.push({ call: prop as string, args }); };
+      },
+      set(_target, prop, value) {
+        rec.push({ set: prop as string, value });
+        return true;
+      },
+    });
+    draw(recorder);
+    byId.set(id, (ops = rec));
+  }
+  const c = ctx as unknown as Record<string, unknown>;
+  for (const op of ops) {
+    if ('call' in op) (c[op.call] as (...a: unknown[]) => void)(...op.args);
+    else c[op.set] = op.value;
+  }
+}
