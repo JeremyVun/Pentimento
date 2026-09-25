@@ -1,4 +1,5 @@
-import { Painter, DEFAULT_LAYERS } from './gl/painter';
+import { Painter } from './gl/painter';
+import { livingParams, needsMip } from './hand';
 import { SCENES } from './scene/config';
 import { drawScene } from './scene/draw';
 import { drawFlow } from './scene/flow';
@@ -47,8 +48,8 @@ export function runViewer(params: URLSearchParams): void {
   const frame = () => {
     const t = freeze ? t0 : t0 + (performance.now() - start) / 1000;
     drawScene(sctx, sc.height, { cfg, t, sketch: false, woke: Object.fromEntries(Object.entries(woke).map(([k, v]) => [k, v + t - t0])) });
-    painter.uploadScene(sc, !!cfg.blur);
-    painter.renderLiving({ time: t, warp: 1, blur: cfg.blur ?? 0, strokeScale: cfg.blur ? 1.6 : 1, angle: 0, follow: 1, layers: DEFAULT_LAYERS });
+    painter.uploadScene(sc, needsMip(cfg));
+    painter.renderLiving(livingParams(cfg, t, { follow: 1 }));
     painter.present({ time: t, sketch, wash: 0, living: mask === 'none' ? 0 : 1, dryFade: 0, liftMode: false, layers: 1 });
     (window as unknown as { __frames: number }).__frames = ((window as unknown as { __frames: number }).__frames || 0) + 1;
     requestAnimationFrame(frame);

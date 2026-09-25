@@ -63,6 +63,38 @@ vec3 hsv2rgb(vec3 c) {
 }
 `;
 
+// How she paints that year: saturation, contrast, and how far colours are pulled to the unmixed paints of a child's tin.
+const HAND = `
+uniform float uSat;
+uniform float uTin;
+uniform float uContrast;
+const vec3 TIN[12] = vec3[12](
+  vec3(0.98, 0.85, 0.24), vec3(0.86, 0.6, 0.22), vec3(0.91, 0.34, 0.19), vec3(0.74, 0.16, 0.22),
+  vec3(0.47, 0.3, 0.62), vec3(0.2, 0.3, 0.72), vec3(0.33, 0.62, 0.9), vec3(0.13, 0.5, 0.42),
+  vec3(0.42, 0.72, 0.3), vec3(0.62, 0.33, 0.2), vec3(0.36, 0.25, 0.2), vec3(0.14, 0.14, 0.17)
+);
+vec3 tinColour(vec3 c) {
+  vec3 sum = vec3(0.0);
+  float tot = 0.0;
+  for (int i = 0; i < 13; i++) {
+    for (int k = 0; k < 2; k++) {
+      vec3 t = i == 12 ? vec3(0.97, 0.96, 0.93) : mix(TIN[i], vec3(0.97, 0.96, 0.93), float(k) * 0.4);
+      vec3 d = (c - t) * vec3(1.0, 1.2, 0.9);
+      float w = exp(-dot(d, d) * 90.0);
+      sum += t * w;
+      tot += w;
+    }
+  }
+  return tot > 1e-5 ? sum / tot : c;
+}
+vec3 handColour(vec3 c) {
+  c = mix(vec3(lum(c)), c, uSat);
+  c = (c - 0.55) * uContrast + 0.55;
+  if (uTin > 0.0) c = mix(c, tinColour(clamp(c, 0.0, 1.0)), uTin);
+  return clamp(c, 0.0, 1.0);
+}
+`;
+
 export const FULLSCREEN_VS = `${HEADER}
 out vec2 vUV;
 void main() {
@@ -97,7 +129,7 @@ void main() {
 `;
 
 // The living layer's underpainting: the scene, sampled through a slow flowing warp.
-export const BASE_FS = `${HEADER}${NOISE}
+export const BASE_FS = `${HEADER}${NOISE}${HAND}
 in vec2 vUV;
 uniform sampler2D uScene;
 uniform sampler2D uFlow;
@@ -105,6 +137,7 @@ uniform float uTime;
 uniform float uAspect;
 uniform float uWarp;
 uniform float uBlur;
+uniform float uLod;
 out vec4 outColor;
 void main() {
   vec2 uv = vUV;
@@ -126,7 +159,7 @@ void main() {
     }
     col /= tot;
   } else {
-    col = texture(uScene, wuv).rgb;
+    col = textureLod(uScene, wuv, uLod).rgb;
   }
   vec4 fl = texture(uFlow, uv);
   float ang = fl.b > 0.004 ? (fl.b - 0.5) * 3.14159 : 0.0;
@@ -139,12 +172,12 @@ void main() {
   float l = lum(col);
   col = mix(vec3(l), col, 0.9);
   col = col * 0.95 + vec3(0.03, 0.026, 0.018);
-  outColor = vec4(col, 1.0);
+  outColor = vec4(handColour(col), 1.0);
 }
 `;
 
 // Brush strokes, drawn instanced over the base. Everything about a stroke comes from its instance id.
-export const STROKE_VS = `${HEADER}${NOISE}
+export const STROKE_VS = `${HEADER}${NOISE}${HAND}
 uniform sampler2D uScene;
 uniform sampler2D uFlow;
 uniform vec2 uRes;
@@ -158,6 +191,8 @@ uniform float uDrift;
 uniform float uOpacity;
 uniform float uLod;
 uniform float uAngle;
+uniform float uScrub;
+uniform float uBroken;
 out vec2 vLocal;
 out vec3 vColor;
 out float vAlpha;
@@ -189,7 +224,7 @@ void main() {
   float keep = uDetail <= 0.0 ? 1.0 : smoothstep(uDetail, uDetail * 1.8, gm);
 
   float ang;
-  float edgeW = smoothstep(0.02, 0.12, gm);
+  float edgeW = smoothstep(0.02, 0.12, gm) * (1.0 - 0.8 * uScrub);
   float hint = fl.b;
   float baseAng = hint > 0.004 ? (hint - 0.5) * 3.14159 : uAngle;
   float edgeAng = atan(g.y, g.x) + 1.5708;
@@ -198,7 +233,7 @@ void main() {
   if (dot(bd, ed) < 0.0) ed = -ed;
   float force = hint > 0.004 ? smoothstep(0.25, 0.4, length(drift)) : 0.0;
   vec2 dir = normalize(mix(mix(bd, ed, edgeW), bd, force) + 1e-4);
-  ang = atan(dir.y, dir.x) + (h1.z - 0.5) * 0.5;
+  ang = atan(dir.y, dir.x) + (h1.z - 0.5) * mix(0.5, 2.6, uScrub);
 
   vec2 size = uSize * (0.7 + 0.6 * h1.w);
   float isBase = step(uDetail, 0.0);
@@ -210,10 +245,10 @@ void main() {
   vec3 c1 = sampleScene(p + dirv * size.x * 0.35 / uRes.y * vec2(1.0 / uAspect, 1.0));
   vec3 col = mix(c0, c1, 0.3 * h2.x);
   vec3 hsv = rgb2hsv(col);
-  hsv.x = fract(hsv.x + (h2.y - 0.5) * 0.012);
-  hsv.y = clamp(hsv.y * (0.93 + 0.14 * h2.z), 0.0, 1.0);
-  hsv.z = clamp(hsv.z * (0.965 + 0.07 * h2.w), 0.0, 1.0);
-  vColor = hsv2rgb(hsv);
+  hsv.x = fract(hsv.x + (h2.y - 0.5) * 0.012 * uBroken * uBroken);
+  hsv.y = clamp(hsv.y * (1.0 + (h2.z - 0.5) * 0.14 * uBroken), 0.0, 1.0);
+  hsv.z = clamp(hsv.z * (1.0 + (h2.w - 0.5) * 0.07 * uBroken * uBroken), 0.0, 1.0);
+  vColor = handColour(hsv2rgb(hsv));
 
   float env = smoothstep(0.0, 0.12, ph) * (1.0 - smoothstep(0.82, 1.0, ph));
   vAlpha = env * keep * uOpacity;
@@ -226,6 +261,38 @@ void main() {
   vec2 off = offPx / uRes;
   vec2 pos = p + off;
   gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
+}
+`;
+
+// A child's dark painted outline around the shapes: wobbly, a little off the true edge, thicker and thinner as the brush loads.
+export const OUTLINE_FS = `${HEADER}${NOISE}
+in vec2 vUV;
+uniform sampler2D uScene;
+uniform vec2 uRes;
+uniform float uAspect;
+uniform float uLod;
+uniform float uOutline;
+out vec4 outColor;
+float edgeAt(vec2 uv, vec2 e) {
+  vec3 l = textureLod(uScene, uv - vec2(e.x, 0.0), uLod).rgb;
+  vec3 r = textureLod(uScene, uv + vec2(e.x, 0.0), uLod).rgb;
+  vec3 u = textureLod(uScene, uv - vec2(0.0, e.y), uLod).rgb;
+  vec3 d = textureLod(uScene, uv + vec2(0.0, e.y), uLod).rgb;
+  return length(r - l) + length(d - u);
+}
+void main() {
+  vec2 q = vUV * vec2(uAspect, 1.0);
+  vec2 off = vec2(snoise(q * 3.0 + 4.0), snoise(q * 3.0 + 9.0)) * 0.004 + vec2(snoise(q * 11.0), snoise(q * 11.0 + 5.0)) * 0.0012;
+  vec2 uv = vUV + off * vec2(1.0 / uAspect, 1.0);
+  vec2 e = vec2(1.6 / uRes.y) * exp2(min(uLod, 1.0)) * vec2(1.0 / uAspect, 1.0);
+  float edge = edgeAt(uv, e);
+  float load = 0.55 + 0.45 * vnoise(q * 18.0 + 2.0);
+  float line = smoothstep(0.24, 0.5, edge * load);
+  float skip = smoothstep(0.12, 0.3, vnoise(q * 34.0 + 7.0));
+  float a = line * skip * uOutline;
+  if (a < 0.004) discard;
+  vec3 c = vec3(0.16, 0.17, 0.26) * (0.9 + 0.2 * vnoise(q * 60.0));
+  outColor = vec4(c, a * 0.85);
 }
 `;
 
