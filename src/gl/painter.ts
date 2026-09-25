@@ -5,7 +5,8 @@ import {
 } from './shaders';
 
 export const ASPECT = 1.6;
-export const MAX_LAYERS = 10;
+/** One dried layer per chapter; each is a full-size RGBA8 slice (8 MB at 1800x1125). */
+export const MAX_LAYERS = 9;
 /** Spread passes a second: a pour takes about a second and a half to flow across its shape. */
 const SPREAD_PASSES = 100;
 export const PAPER_RGB: [number, number, number] = [0.953, 0.925, 0.868];
