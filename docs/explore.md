@@ -101,6 +101,10 @@ Paint now flows only while the button is held (`pourAdd` in `src/gl/painter.ts`,
 
 Every spot a press passes over now keeps spreading for as long as the button is held (`pourSpots`), so a drag leaves a band that widens while you hold, and everything stops when you let go.
 
+> yea it's way too fast
+
+Spots along a drag now sit about a pool's width apart so their paint doesn't pile up, start smaller than a click (`TRAIL_START`), and widen at a quarter of the speed up to a limit (`TRAIL_REACH_PER_SEC`, `TRAIL_MAX`). The spot under the cursor still spreads at full speed while you hold still. A one-second scribble across the sky leaves a band of about 9% of the board.
+
 ## Polish after the merge (2026-09-25)
 
 - Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.

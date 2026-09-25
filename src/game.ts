@@ -23,8 +23,14 @@ const REFLECT_NOTES = 6;
 const DRY_RATE = 0.06;
 /** How much further paint reaches for each second the button is held. */
 const REACH_PER_SEC = 0.4;
-/** A quick click, or each new spot a drag passes over, starts with a small pool. */
+/** Where a drag has already been keeps spreading while the button is held, more slowly than under the cursor and only so far. */
+const TRAIL_REACH_PER_SEC = 0.1;
+const TRAIL_MAX = 0.15;
+/** A quick click starts with a small pool; each new spot along a drag with a smaller one. */
 const CLICK_REACH = 0.06;
+const TRAIL_START = 0.025;
+/** Spots along a drag sit about a pool's width apart, so their paint doesn't pile up where they overlap. */
+const SPOT_GAP = 0.03;
 /** Seconds after a moment is caught before the paint around it sets, holding it mid-wave. */
 const SETS_AFTER: Record<string, number> = { joe: 3.5, ferry: 2.5, train: 0.8, bus: 2, robin: 2.6 };
 
@@ -48,7 +54,7 @@ export class Game {
   private regionCanvas: HTMLCanvasElement;
   private pourHeld = 0;
   /** Every spot this press has poured on. They all keep spreading until the button is let go. */
-  private pourSpots: { x: number; y: number }[] = [];
+  private pourSpots: { x: number; y: number; reach: number }[] = [];
   private readT = 0;
   private coverage = new Coverage();
   private liftGrid = new Coverage();
@@ -605,12 +611,23 @@ export class Game {
       this.pourHeld += dt;
       if (!this.wasDown) this.pourSpots = [];
       const k = this.chapter?.brush ?? 1;
-      const seeds: Dab[] = this.pourSpots.map((p) => ({ x: p.x, y: p.y, r: 0.016, strength: REACH_PER_SEC * dt * k, angle: 0, seed: 1 }));
-      const at = dabs.length ? dabs : [{ x: this.brush.x, y: this.brush.y }];
+      const near = (p: { x: number; y: number }, x: number, y: number) => Math.hypot((p.x - x) * ASPECT, p.y - y) < SPOT_GAP;
+      const bx = this.brush.x;
+      const by = this.brush.y;
+      const seeds: Dab[] = [];
+      for (const p of this.pourSpots) {
+        const under = near(p, bx, by);
+        if (!under && p.reach >= TRAIL_MAX) continue;
+        const add = (under ? REACH_PER_SEC : TRAIL_REACH_PER_SEC) * dt;
+        p.reach += add;
+        seeds.push({ x: p.x, y: p.y, r: 0.016, strength: add * k, angle: 0, seed: 1 });
+      }
+      const at = dabs.length ? dabs : [{ x: bx, y: by }];
       for (const d of at) {
-        if (this.pourSpots.length >= 500 || this.pourSpots.some((p) => Math.abs(p.x - d.x) < 0.012 && Math.abs(p.y - d.y) < 0.012)) continue;
-        this.pourSpots.push({ x: d.x, y: d.y });
-        seeds.push({ x: d.x, y: d.y, r: 0.016, strength: (CLICK_REACH + REACH_PER_SEC * dt) * k, angle: 0, seed: 1 });
+        if (this.pourSpots.length >= 500 || this.pourSpots.some((p) => near(p, d.x, d.y))) continue;
+        const start = this.pourSpots.length ? TRAIL_START : CLICK_REACH;
+        seeds.push({ x: d.x, y: d.y, r: 0.016, strength: start * k, angle: 0, seed: 1 });
+        this.pourSpots.push({ x: d.x, y: d.y, reach: start });
       }
       this.painter.pourAdd(seeds, 0.1 + this.pourBudget);
       this.pourOnMoments();
