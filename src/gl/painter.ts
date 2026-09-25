@@ -377,13 +377,13 @@ export class Painter {
     this.drawDabs(this.lift, dabs, 0);
   }
 
-  private decay(target: Target, r: number, g: number): void {
+  private decay(target: Target, r: number, g: number, a = 1): void {
     const gl = this.gl;
     bindTarget(gl, target);
     gl.bindVertexArray(this.emptyVao);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ZERO, gl.CONSTANT_COLOR);
-    gl.blendColor(r, g, 1, 1);
+    gl.blendColor(r, g, 1, a);
     this.pDecay.use();
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.BLEND);
@@ -391,7 +391,7 @@ export class Painter {
 
   dryMask(dt: number, rate = 0.55): void {
     this.decay(this.mask, 1, Math.exp(-dt * rate));
-    this.decay(this.pour[this.pourIdx], Math.exp(-dt * 0.35), Math.exp(-dt * rate));
+    this.decay(this.pour[this.pourIdx], 1, Math.exp(-dt * rate), Math.exp(-dt * 0.8));
   }
 
   /** Sets the paint inside a box (scene units, y down) at once, keeping whatever it shows now. */
@@ -432,8 +432,7 @@ export class Painter {
   }
 
   /** Lets poured paint flow on through its region. */
-  /** `leak` lets paint cross into neighbouring shapes; `run` lets it run downwards in streaks. */
-  pourSpread(dt: number, seed: number, leak = 0, run = 0): void {
+  pourSpread(dt: number, seed: number): void {
     const gl = this.gl;
     const passes = Math.max(1, Math.min(5, Math.round(dt * 170)));
     gl.bindVertexArray(this.emptyVao);
@@ -448,9 +447,7 @@ export class Painter {
         .tex('uRegion', 1, this.regionTex)
         .i('uSet', this.spreadSet)
         .f('uAspect', ASPECT)
-        .f('uSeed', seed)
-        .f('uLeak', leak)
-        .f('uRun', run);
+        .f('uSeed', seed);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       this.pourIdx = 1 - this.pourIdx;
     }

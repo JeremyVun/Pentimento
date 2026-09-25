@@ -28,6 +28,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, H: number, f: Frame): v
   clouds(ctx, f);
   R(REGION.hills);
   hills(ctx, c.pal, c);
+  if (c.town >= 1.35) turbines(ctx, f);
   drawTrain(ctx, f);
   R(REGION.fields);
   farBank(ctx, c.pal, c);
@@ -475,6 +476,19 @@ export function houses(): House[] {
       since: i < 4 ? 0 : 0.5 + i * 0.1, roof2: r() < 0.4, lit: r(),
     });
   }
+  // Once the bridge is open the town spreads over the fields across the river, then up the hill.
+  const spread: [number, number, number, number][] = [
+    [0.44, 0.512, 0.5, 0], [0.5, 0.508, 0.55, 0], [0.8, 0.51, 0.6, 0], [0.87, 0.506, 0.65, 0], [0.94, 0.51, 0.7, 0],
+    [0.55, 0.503, 0.85, 0], [0.84, 0.5, 0.9, 0], [0.99, 0.505, 0.95, 0],
+    [1.12, 0.478, 0.95, 1], [1.2, 0.474, 1.0, 1], [1.47, 0.47, 1.05, 1], [1.27, 0.471, 1.15, 1], [1.53, 0.468, 1.2, 1],
+    [1.08, 0.482, 1.25, 1],
+  ];
+  for (const [x, y, since, hill] of spread) {
+    list.push({
+      x, y, w: (0.024 + r() * 0.018) * (hill ? 0.8 : 1), h: (0.016 + r() * 0.01) * (hill ? 0.8 : 1), wall: Math.floor(r() * 3),
+      gable: r() < 0.5, since, roof2: r() < 0.5, lit: r(),
+    });
+  }
   list.sort((a, b) => a.y - b.y);
   HOUSES = list;
   return list;
@@ -484,6 +498,8 @@ function town(ctx: CanvasRenderingContext2D, f: Frame): void {
   const c = f.cfg;
   const P = c.pal;
   const walls = [P.wall1, P.wall2, P.wall3];
+  if (c.town >= 0.75) mill(ctx, f);
+  if (c.town >= 0.7) poles(ctx, P);
   let churchDrawn = false;
   for (const h of houses()) {
     if (h.since > c.town) continue;
@@ -494,6 +510,102 @@ function town(ctx: CanvasRenderingContext2D, f: Frame): void {
     house(ctx, h, walls[h.wall], P, c);
   }
   if (!churchDrawn) church(ctx, f);
+  if (c.town >= 1.15) flats(ctx, f);
+}
+
+/** The mill on the far bank. Its chimney smokes while it runs, and goes cold when it closes. */
+function mill(ctx: CanvasRenderingContext2D, f: Frame): void {
+  const P = f.cfg.pal;
+  const x = 0.6;
+  const y = 0.516;
+  const brick = mixHex('#9a5a44', P.wallShade, 0.35);
+  ctx.fillStyle = shade(brick, -0.15);
+  ctx.fillRect(x + 0.135, y - 0.075, 0.011, 0.075);
+  ctx.fillStyle = brick;
+  ctx.fillRect(x, y - 0.026, 0.14, 0.026);
+  for (let k = 0; k < 5; k++) {
+    const sx = x + k * 0.028;
+    poly(ctx, [[sx, y - 0.026], [sx + 0.022, y - 0.04], [sx + 0.028, y - 0.026]]);
+    ctx.fillStyle = k % 2 ? P.roofShade : P.roof2;
+    ctx.fill();
+  }
+  ctx.fillStyle = f.cfg.townLit ? P.windowLit : P.window;
+  for (let k = 0; k < 7; k++) ctx.fillRect(x + 0.008 + k * 0.019, y - 0.018, 0.008, 0.008);
+  if (f.cfg.town < 1.1 && !f.sketch) {
+    for (let k = 0; k < 7; k++) {
+      const ph = (f.t * 0.12 + k / 7) % 1;
+      circle(ctx, x + 0.141 + ph * 0.07 * (0.5 + f.cfg.wind), y - 0.08 - ph * 0.06, 0.006 + ph * 0.02, withAlpha('#d9d4cc', 0.5 * (1 - ph)));
+    }
+  }
+}
+
+function poles(ctx: CanvasRenderingContext2D, P: Palette): void {
+  ctx.strokeStyle = P.woodShade;
+  ctx.lineWidth = 0.0018;
+  const xs = [0.42, 0.53, 0.64, 0.79, 0.9, 1.01];
+  const y = 0.52;
+  ctx.beginPath();
+  for (const x of xs) {
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y - 0.034);
+    ctx.moveTo(x - 0.005, y - 0.03);
+    ctx.lineTo(x + 0.005, y - 0.03);
+  }
+  ctx.stroke();
+  ctx.lineWidth = 0.0008;
+  ctx.beginPath();
+  for (let i = 0; i < xs.length - 1; i++) {
+    ctx.moveTo(xs[i], y - 0.03);
+    ctx.quadraticCurveTo((xs[i] + xs[i + 1]) / 2, y - 0.024, xs[i + 1], y - 0.03);
+  }
+  ctx.stroke();
+}
+
+/** Flats built by the church, the one tall flat-roofed building in the view. */
+function flats(ctx: CanvasRenderingContext2D, f: Frame): void {
+  const P = f.cfg.pal;
+  const x = 1.4;
+  const y = 0.54;
+  const w = 0.05;
+  const h = 0.07;
+  const wall = mixHex(P.wall1, P.stoneShade, 0.25);
+  poly(ctx, [[x + w, y - h], [x + w + 0.016, y - h - 0.004], [x + w + 0.016, y - 0.004], [x + w, y]]);
+  ctx.fillStyle = P.wallShade;
+  ctx.fill();
+  ctx.fillStyle = wall;
+  ctx.fillRect(x, y - h, w, h);
+  ctx.fillStyle = shade(wall, -0.2);
+  ctx.fillRect(x - 0.002, y - h - 0.004, w + 0.004, 0.005);
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 4; col++) {
+      const lit = f.cfg.townLit && ((row * 4 + col) * 0.37) % 1 < 0.4;
+      ctx.fillStyle = lit ? P.windowLit : P.window;
+      ctx.fillRect(x + 0.006 + col * 0.011, y - h + 0.008 + row * 0.012, 0.006, 0.006);
+    }
+  }
+}
+
+/** Wind turbines on the far hills, the newest thing in the view. */
+function turbines(ctx: CanvasRenderingContext2D, f: Frame): void {
+  const spots: [number, number][] = [[0.8, 0.44], [0.93, 0.436], [1.06, 0.442]];
+  spots.forEach(([x, y], i) => {
+    const h = 0.055;
+    ctx.strokeStyle = '#ecebe6';
+    ctx.lineWidth = 0.0022;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y - h);
+    ctx.stroke();
+    const a0 = f.sketch ? i : f.t * (1.1 + i * 0.13) + i * 1.7;
+    ctx.lineWidth = 0.0016;
+    ctx.beginPath();
+    for (let k = 0; k < 3; k++) {
+      const a = a0 + (k * Math.PI * 2) / 3;
+      ctx.moveTo(x, y - h);
+      ctx.lineTo(x + Math.cos(a) * 0.026, y - h + Math.sin(a) * 0.026);
+    }
+    ctx.stroke();
+  });
 }
 
 function house(ctx: CanvasRenderingContext2D, h: House, wall: string, P: Palette, c: SceneConfig): void {

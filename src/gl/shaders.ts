@@ -294,7 +294,8 @@ void main() {
 }
 `;
 
-// Poured paint. R = paint left to spread, G = wetness, B = painted this sitting.
+// Poured paint. R = paint left to spread, G = wetness, B = painted this sitting,
+// A = fresh paint still flowing from the latest pours (it fades, so pouring again re-wets what it reaches).
 // A pour seed only wets the region most of the brush is over, so clicks near an edge or on a
 // stray edge pixel still fill the shape the player meant.
 export const POUR_SEED_VS = `${HEADER}
@@ -351,7 +352,7 @@ void main() {
   float n = vnoise(vLocal * 2.5 + vSeed);
   float shape = 1.0 - smoothstep(0.55, 1.0, r + (n - 0.5) * 0.4);
   if (shape <= 0.0) discard;
-  outColor = vec4(vStrength * shape, 1.0, 0.0, 0.0);
+  outColor = vec4(vStrength * shape, 1.0, 0.0, vStrength * shape);
 }
 `;
 
@@ -362,8 +363,6 @@ uniform sampler2D uRegion;
 uniform float uAspect;
 uniform float uSeed;
 uniform int uSet;
-uniform float uLeak;
-uniform float uRun;
 out vec4 outColor;
 const ivec2 SET_A[8] = ivec2[8](ivec2(2, 0), ivec2(-2, 0), ivec2(0, 2), ivec2(0, -2), ivec2(1, 1), ivec2(1, -1), ivec2(-1, 1), ivec2(-1, -1));
 const ivec2 SET_B[8] = ivec2[8](ivec2(2, 1), ivec2(-2, -1), ivec2(1, -2), ivec2(-1, 2), ivec2(2, -1), ivec2(-2, 1), ivec2(1, 2), ivec2(-1, -2));
@@ -377,21 +376,21 @@ void main() {
   float rough = 0.7 + 1.1 * vnoise(q0 * 70.0 + uSeed) + 0.9 * vnoise(q0 * 9.0 - uSeed);
   float unit = rough / float(size.y);
   float best = c.r;
+  float fresh = c.a;
   for (int i = 0; i < 8; i++) {
     ivec2 o = uSet == 0 ? SET_A[i] : SET_B[i];
     ivec2 q = clamp(p + o, ivec2(0), size - 1);
-    float nb = texelFetch(uPour, q, 0).r;
-    if (nb <= 0.0) continue;
-    float len = length(vec2(o));
-    float runs = uRun * max(0.0, -float(o.y)) / len * smoothstep(0.35, 0.75, vnoise(vec2(q0.x * 60.0 + uSeed, 0.5)));
-    float cand = nb - len * unit * (1.0 - min(0.9, runs));
-    if (rid(q) != me) cand = max(min(cand, 0.004), cand * uLeak);
-    best = max(best, cand);
+    vec4 n = texelFetch(uPour, q, 0);
+    if (n.r <= 0.0 && n.a <= 0.0) continue;
+    float cost = length(vec2(o)) * unit;
+    bool other = rid(q) != me;
+    best = max(best, other ? min(n.r - cost, 0.004) : n.r - cost);
+    if (!other) fresh = max(fresh, n.a - cost);
   }
   float wet = c.g;
-  if (best > c.r + 0.003) wet = 1.0;
+  if (best > c.r + 0.003 || fresh > c.a + 0.003) wet = 1.0;
   float painted = max(c.b, step(0.0005, best));
-  outColor = vec4(max(best, 0.0), wet, painted, 1.0);
+  outColor = vec4(max(best, 0.0), wet, painted, max(fresh, 0.0));
 }
 `;
 

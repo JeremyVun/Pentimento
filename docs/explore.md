@@ -49,6 +49,20 @@ Core loop to test, "wet paint lives, dry paint keeps the moment":
 
 > i think the issue is still that as a user i am watching the painting, but also having to read text underneath.
 
+## Jeremy's second playtest (verbatim)
+
+> pacing is important, i finished the painting and then nothing happens for a long time. Also, was it a deliberate decision not to have the game full screen?
+>
+> The fill in mechanic also needs proper work. i filled it in, and then it became unfilled in again really quickly
+
+> oh yea, because you start introducing hard boundaries later on, it feels like the game is buggy when the painf ill doesn't work as they learnt it did before. Also, the town never really changes over time like i thought it might.
+
+What changed:
+- Pouring works the same in every sitting. No spilling across shapes at nine, no running paint at forty-four: her age shows only in how the paint looks (chunkier strokes at nine, slower drying at forty-four). A click now covers most of a shape; holding finishes it. Paint no longer loses reach while it spreads (that shortened every pour); a separate fading "fresh paint" channel re-wets dry paint when you pour over it.
+- Moments come when she's ready (enough painted, or the brush has been down a few seconds) rather than on the clock, and move shorter distances. The sitting ends by itself once everything has passed and she has stopped painting for a few seconds.
+- The board fills the window, and Begin goes full screen. Hints, notes and buttons sit on the board.
+- The town grows across the life: houses spread across the fields after the bridge opens, a mill smokes at forty-four and is cold by seventy-two, telegraph poles, houses up the hill, flats by the church, and wind turbines at the end.
+
 ## Polish after the merge (2026-09-25)
 
 - Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.

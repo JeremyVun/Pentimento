@@ -173,13 +173,13 @@ export function joeOnBridge(c: Frame['cfg'], t: number, woke: number | undefined
   if (!c.figures.includes(ghost ? 'joeGhost' : 'joeBridge')) return null;
   if (ghost && woke !== undefined) return null;
   const at = c.moments?.[ghost ? 'joeGhost' : 'joe'] ?? 0;
-  const walk = c.moments?.joe === undefined && !ghost ? c.duration * 0.95 : 20;
+  const walk = c.moments?.joe === undefined && !ghost ? c.duration * 0.95 : 15;
   const walkT = t - at - (woke === undefined ? 0 : Math.min(woke, JOE_STOPS));
   if (walkT < 0 || walkT > walk) return null;
   return { x: lerp(0.37, 1.12, walkT / walk), y: BRIDGE.top, walkT, waving: woke !== undefined && woke < JOE_STOPS };
 }
 
-const FERRY_CROSSING = 26;
+const FERRY_CROSSING = 18;
 const FERRY_WAVES = 6;
 
 /** The ferry's x on the river. With a moment set, it waits at the far jetty, crosses once and ties up at the near one. */
@@ -190,7 +190,7 @@ export function ferryX(c: Frame['cfg'], t: number, woke: number | undefined): { 
   return { x: lerp(1.04, 0.54, smooth(0, 1, clamp(u))), crossing: u > 0 && u < 1 };
 }
 
-const TRAIN_CROSSING = 22;
+const TRAIN_CROSSING = 16;
 const TRAIN_Y = 0.452;
 
 function trainX(c: Frame['cfg'], t: number): number | null {
@@ -252,7 +252,7 @@ export function busGone(c: Frame['cfg'], t: number): boolean {
   return at === undefined ? t > c.duration * 0.8 : t > at + BUS_CROSSING;
 }
 
-const ROBIN_STAYS = 30;
+const ROBIN_STAYS = 14;
 
 /** The robin on the garden wall. With a moment set, it flies in, stays a while and leaves. */
 export function robinAt(c: Frame['cfg'], t: number, woke: number | undefined): { x: number; y: number } | null {
@@ -263,7 +263,7 @@ export function robinAt(c: Frame['cfg'], t: number, woke: number | undefined): {
   if (at !== undefined) {
     const s = t - at;
     if (s < 0) return null;
-    const stays = woke === undefined ? ROBIN_STAYS : Math.max(ROBIN_STAYS, s - woke + 8);
+    const stays = woke === undefined ? ROBIN_STAYS : Math.max(ROBIN_STAYS, s - woke + 6.5);
     if (s > stays + 1.5) return null;
     if (s < 1.5) {
       const u = s / 1.5;
@@ -361,7 +361,7 @@ function childAt(c: Frame['cfg'], t: number): { x: number; y: number } | null {
   const at = c.moments?.child;
   if (at === undefined) return { x: fx + 0.07, y: fy };
   const s = t - at;
-  if (s < 0 || s > 40) return null;
+  if (s < 0 || s > 22) return null;
   return { x: fx + 0.07 + Math.sin(s * 0.35) * 0.12 + s * 0.004, y: fy - 0.01 + Math.sin(s * 0.6) * 0.012 };
 }
 

@@ -61,8 +61,8 @@ export interface SceneConfig {
   trainArrives?: boolean;
   /** Her eyes have gone: no pencil lines, only blurred colour. */
   noPencil?: boolean;
-  /** How her paint behaves that year: spilling into neighbouring shapes, splashing, running down. */
-  pour?: { leak?: number; splash?: number; run?: number; dry?: number };
+  /** How her paint looks that year: stroke size, and how slowly it dries. Filling always works the same way. */
+  pour?: { strokes?: number; dry?: number };
 }
 
 const base: Palette = {
@@ -119,7 +119,7 @@ export const SCENES: Record<string, SceneConfig> = {
     town: 0, bridge: 'none', ferry: 'active',
     fig: { size: 0.04, leaves: 'stick' },
     figures: ['father', 'ferryman'], birds: 'swallows', wind: 0.4, duration: 80, moments: { ferry: 40 },
-    pour: { leak: 0.55, splash: 1 },
+    pour: { strokes: 1.35 },
   },
 
   sixteen: {
@@ -216,7 +216,7 @@ export const SCENES: Record<string, SceneConfig> = {
     fig: { size: 0.62, leaves: 'none', broken: true },
     bench: true,
     figures: ['lanterns', 'fatherGhost'], weather: 'storm', kitchenLight: true, wind: 1, lightning: true, duration: 80, moments: { father: 36 },
-    pour: { leak: 0.3, run: 0.75, dry: 0.6 },
+    pour: { dry: 0.6 },
   },
 
   fortynine: {
@@ -236,7 +236,7 @@ export const SCENES: Record<string, SceneConfig> = {
     }),
     sun: { x: 1.28, y: 0.3, r: 0.05, glow: 0.45 },
     clouds: { kind: 'streaky', n: 6, y0: 0.05, y1: 0.28, speed: 0.004, scale: 1 },
-    town: 1, bridge: 'built', lamps: 'off', ferry: 'none',
+    town: 0.95, bridge: 'built', lamps: 'off', ferry: 'none',
     fig: { size: 0.7, leaves: 'autumn', fruit: true },
     bench: true, beans: 'green',
     figures: ['bus', 'joeBeans'], weather: 'leaves', mist: true, wind: 0.3, duration: 80, moments: { bus: 24 }, bellAt: 23.4,
@@ -262,7 +262,7 @@ export const SCENES: Record<string, SceneConfig> = {
     }),
     sun: { x: 0.98, y: 0.43, r: 0.04, glow: 0.35 },
     clouds: { kind: 'streaky', n: 5, y0: 0.05, y1: 0.3, speed: 0.003, scale: 1 },
-    town: 1, townLit: true, snow: true, ice: true, bridge: 'built', lamps: 'dawn', ferry: 'none',
+    town: 1.2, townLit: true, snow: true, ice: true, bridge: 'built', lamps: 'dawn', ferry: 'none',
     fig: { size: 0.78, leaves: 'none', snow: true, broken: true },
     bench: true, beans: 'bare',
     figures: ['joeGhost'], birds: 'robin', weather: 'snow', wind: 0.15, duration: 95, moments: { joeGhost: 26.6, robin: 52 }, bellAt: 26,
@@ -283,7 +283,7 @@ export const SCENES: Record<string, SceneConfig> = {
     }),
     sun: { x: 1.05, y: 0.2, r: 0.045, glow: 0.35 },
     clouds: { kind: 'cumulus', n: 5, y0: 0.08, y1: 0.28, speed: 0.004, scale: 1 },
-    town: 1, bridge: 'built', lamps: 'off', ferry: 'none',
+    town: 1.3, bridge: 'built', lamps: 'off', ferry: 'none',
     fig: { size: 0.88, leaves: 'spring' },
     bench: true,
     figures: ['child', 'june'], weather: 'petals', cherry: true, window: true, blur: 0.011, wind: 0.3, duration: 85, moments: { child: 24 }, noPencil: true,
@@ -297,7 +297,7 @@ export const SCENES: Record<string, SceneConfig> = {
     }),
     sun: { x: 1.36, y: 0.12, r: 0.04, glow: 0.3 },
     clouds: { kind: 'cumulus', n: 6, y0: 0.08, y1: 0.3, speed: 0.006, scale: 1 },
-    town: 1, bridge: 'built', lamps: 'off', ferry: 'none',
+    town: 1.4, bridge: 'built', lamps: 'off', ferry: 'none',
     fig: { size: 1, leaves: 'summer', fruit: true },
     bench: true,
     figures: ['kidsBridge', 'rower', 'train'], birds: 'swallows', wind: 0.4, duration: 85, moments: { train: 26, kids: 58 }, trainArrives: true,

@@ -22,6 +22,7 @@ export class View {
   private finish: HTMLButtonElement;
   private mute: HTMLButtonElement;
   private end: HTMLElement;
+  private controls!: HTMLElement;
   private rect = { x: 0, y: 0, w: 0, h: 0 };
   onBegin: (() => void) | null = null;
   onFinish: (() => void) | null = null;
@@ -41,7 +42,10 @@ export class View {
     el('h1', '', plate, TITLE);
     el('p', 'definition', plate, DEFINITION);
     const begin = el('button', 'begin', plate, UI.begin);
-    begin.addEventListener('click', () => this.onBegin?.());
+    begin.addEventListener('click', () => {
+      if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
+      this.onBegin?.();
+    });
     this.notes = el('div', 'notes', root);
     el('p', '', this.notes, UI.sound);
     el('p', 'keys', this.notes, UI.keys);
@@ -55,6 +59,7 @@ export class View {
     this.hint = el('div', 'hint', root);
 
     const controls = el('div', 'controls', root);
+    this.controls = controls;
     this.finish = el('button', 'quiet finish', controls, UI.finish);
     this.finish.addEventListener('click', () => this.onFinish?.());
     this.mute = el('button', 'quiet', controls, UI.mute);
@@ -92,22 +97,25 @@ export class View {
   layout(): void {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const band = Math.max(96, vh * 0.15);
-    let h = Math.min(vh - band - vh * 0.05, (vw * 0.95) / ASPECT);
-    h = Math.max(160, h);
+    const margin = document.fullscreenElement ? 0 : 0.03;
+    const h = Math.max(160, Math.min(vh * (1 - margin), (vw * (1 - margin)) / ASPECT));
     const w = h * ASPECT;
     const x = (vw - w) / 2;
-    const y = Math.max(vh * 0.035, (vh - band - h) * 0.55);
+    const y = (vh - h) / 2;
     this.rect = { x, y, w, h };
     Object.assign(this.board.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
     for (const e of [this.title, this.card]) {
       Object.assign(e.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
     }
-    const top = y + h;
     Object.assign(this.narrationRoot.style, { left: `${x}px`, width: `${w}px`, top: `${y}px`, height: `${h}px` });
     for (const e of [this.hint, this.notes]) {
-      Object.assign(e.style, { left: `${x}px`, width: `${w}px`, top: `${top}px`, height: `${vh - top}px` });
+      Object.assign(e.style, { left: `${x}px`, width: `${w}px`, top: `${y + h * 0.78}px`, height: `${h * 0.18}px` });
     }
+    const inset = h * 0.045;
+    for (const e of [this.controls, this.end]) {
+      Object.assign(e.style, { bottom: `${vh - (y + h) + inset}px` });
+    }
+    this.controls.style.right = `${vw - (x + w) + inset}px`;
     document.documentElement.style.setProperty('--board-h', `${h}px`);
   }
 
@@ -126,7 +134,8 @@ export class View {
   }
 
   showHint(text: string, centred = false): void {
-    this.hint.textContent = text;
+    this.hint.replaceChildren();
+    el('span', '', this.hint, text);
     this.hint.classList.toggle('centred', centred);
     this.hint.classList.add('on');
   }

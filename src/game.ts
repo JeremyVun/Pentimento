@@ -51,6 +51,9 @@ export class Game {
   private finishRequested = false;
   private baked = false;
   private paintedSeconds = 0;
+  /** Seconds since the brush was last down, and since the last moment passed. */
+  private idleT = 0;
+  private sinceGone = 0;
   private hintShown = false;
   private checkT = 0;
   private pulse: { x: number; y: number; rx: number; ry: number; t: number } | null = null;
@@ -210,7 +213,7 @@ export class Game {
   }
 
   private setScene(cfg: SceneConfig): void {
-    this.cfg = cfg;
+    this.cfg = { ...cfg, moments: cfg.moments && { ...cfg.moments } };
     this.sceneT = 0;
     this.wakeTimes = {};
     drawFlow(this.flowCanvas.getContext('2d')!, this.flowCanvas.height, cfg);
@@ -233,6 +236,8 @@ export class Game {
     this.finishRequested = false;
     this.baked = false;
     this.moments = {};
+    this.idleT = 0;
+    this.sinceGone = 0;
     this.kept = [];
     this.introEnd = Infinity;
     this.openingQueued = false;
@@ -333,9 +338,13 @@ export class Game {
             }
           }
         }
+        this.scheduleMoments(ch);
         this.updateBell();
         this.updateMoments(ch);
         if (this.brush.down) this.paintedSeconds += dt;
+        this.idleT = this.brush.down ? 0 : this.idleT + dt;
+        this.sinceGone += dt;
+        if (this.sittingDone()) this.finishRequested = true;
         if (!this.catchHint && (this.paintedSeconds > 2.5 || this.coverage.total() > 0.06)) this.view.hideHint();
         const canFinish = this.phaseT > 25
           && Object.values(this.moments).every((m) => m.state === 'gone');
@@ -346,7 +355,7 @@ export class Game {
 
       case 'drying': {
         const t = this.phaseT;
-        if (!this.baked) this.painter.pourSpread(dt, this.chapterIndex * 7.3, this.cfg.pour?.leak, this.cfg.pour?.run);
+        if (!this.baked) this.painter.pourSpread(dt, this.chapterIndex * 7.3);
         this.painter.dryMask(dt, 3);
         this.sketch = 1 - ramp(t, 0, 1.2);
         if (!this.baked && t >= 1.3) {
@@ -375,7 +384,7 @@ export class Game {
     const onBoard = this.brush.x >= 0 && this.brush.x <= 1 && this.brush.y >= 0 && this.brush.y <= 1;
     const left = Number.isFinite(this.paintLeft) ? Math.max(0, this.paintLeft / (this.chapter?.paint ?? 1)) : 1;
     const cursorR = this.phase === 'painting'
-      ? (0.006 + 0.012 * Math.sqrt(left)) + (this.brush.down && left > 0 ? this.pourBudget * 0.09 : 0)
+      ? (0.006 + 0.012 * Math.sqrt(left)) + (this.brush.down && left > 0 ? this.pourBudget * 0.035 : 0)
       : this.brush.radius * this.brush.scale;
     this.view.setCursor(
       (this.phase === 'painting' || this.phase === 'lift') && this.brush.inside && onBoard,
@@ -427,6 +436,34 @@ export class Game {
     this.attnAmt += ((spot ? 1 : 0) - this.attnAmt) * Math.min(1, dt * (spot ? 1.2 : 3));
   }
 
+  /** She has painted enough, or has stopped to look. Things can pass now rather than on the clock. */
+  private get ready(): boolean {
+    const c = this.coverage.total();
+    return this.phaseT >= 10 && (c >= 0.5 || (c >= 0.15 && this.idleT >= 3));
+  }
+
+  /** Brings the next moment forward once she's ready and the last one has gone. The bell keeps its place before it. */
+  private scheduleMoments(ch: Chapter): void {
+    const m = this.cfg.moments;
+    if (!m || !this.ready || this.sinceGone < 3) return;
+    const states = Object.values(this.moments);
+    if (states.some((s) => s.state === 'passing' || s.state === 'caught')) return;
+    const next = (ch.moments ?? []).map((d) => d.id).filter((id) => this.moments[id].state === 'waiting')
+      .sort((a, b) => m[a] - m[b])[0];
+    if (!next) return;
+    const lead = this.cfg.bellAt !== undefined && !this.bellRung ? m[next] - this.cfg.bellAt : 0;
+    const at = this.sceneT + lead + 0.5;
+    if (at >= m[next]) return;
+    m[next] = at;
+    if (lead > 0) this.cfg.bellAt = at - lead;
+  }
+
+  /** Everything has passed and she has put the brush down for a while, so the paint can dry. */
+  private sittingDone(): boolean {
+    if (Object.values(this.moments).some((m) => m.state !== 'gone')) return false;
+    return this.phaseT >= 20 && this.sinceGone >= 2 && (this.idleT >= 6 || (this.coverage.total() >= 0.8 && this.idleT >= 2.5));
+  }
+
   private updateBell(): void {
     const at = this.cfg.bellAt;
     if (at === undefined || this.bellRung || this.sceneT < at) return;
@@ -452,6 +489,7 @@ export class Game {
         if (spot) m.last = spot;
         if (!spot) {
           m.state = 'gone';
+          this.sinceGone = 0;
           this.catchHint = false;
           this.view.hideHint();
           if (def.missed) this.kept.push({ lines: [def.appears, def.missed].filter((l): l is string => !!l), spot: m.last, moment: true });
@@ -471,7 +509,10 @@ export class Game {
           m.set = true;
           this.painter.setPaint(spot.x, spot.y, spot.rx + 0.015, spot.ry + 0.015);
         }
-        if (!spot) m.state = 'gone';
+        if (!spot) {
+          m.state = 'gone';
+          this.sinceGone = 0;
+        }
       }
     }
   }
@@ -533,7 +574,7 @@ export class Game {
 
   /** How far paint poured now will flow; holding the button pours more. */
   private get pourBudget(): number {
-    return Math.min(0.85, 0.11 + this.pourHeld * 0.24) * (this.chapter?.brush ?? 1);
+    return Math.min(1.6, 0.5 + this.pourHeld * 0.5) * (this.chapter?.brush ?? 1);
   }
 
   private applyPour(dabs: Dab[], dt: number): void {
@@ -541,7 +582,7 @@ export class Game {
       this.pourHeld = 0;
       if (this.wasDown) this.audio.brushUp();
       this.wasDown = false;
-      this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3, this.cfg.pour?.leak, this.cfg.pour?.run);
+      this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3);
       return;
     }
     if (this.brush.down) {
@@ -551,12 +592,6 @@ export class Game {
       const budget = this.pourBudget;
       const seeds = dabs.filter((_, i) => i % 3 === 0).map((d) => ({ ...d, r: 0.016, strength: budget }));
       if (seeds.length === 0) seeds.push({ x: this.brush.x, y: this.brush.y, r: 0.016, strength: budget, angle: 0, seed: 1 });
-      const splash = this.cfg.pour?.splash ?? 0;
-      if (splash > 0 && Math.random() < dt * 9 * splash) {
-        const a = Math.random() * Math.PI * 2;
-        const d = 0.03 + Math.random() * 0.07;
-        seeds.push({ x: this.brush.x + (Math.cos(a) * d) / ASPECT, y: this.brush.y + Math.sin(a) * d, r: 0.006 + Math.random() * 0.008, strength: 0.03, angle: a, seed: Math.random() * 100 });
-      }
       this.painter.pourSeed(seeds);
       this.pourOnMoments();
       this.audio.brush(this.brush.x, this.brush.y, Math.max(this.brush.speed, 0.5));
@@ -565,7 +600,7 @@ export class Game {
       if (this.wasDown) this.audio.brushUp();
     }
     this.wasDown = this.brush.down;
-    this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3, this.cfg.pour?.leak, this.cfg.pour?.run);
+    this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3);
   }
 
   private applyLift(dabs: Dab[], dt: number): void {
@@ -650,7 +685,7 @@ export class Game {
         time: this.sceneT * slow,
         warp: this.reducedMotion ? 0.3 : 1,
         blur: this.cfg.blur ?? 0,
-        strokeScale: this.cfg.blur ? 1.7 : 1,
+        strokeScale: this.cfg.blur ? 1.7 : this.cfg.pour?.strokes ?? 1,
         angle: 0,
         follow: this.phase === 'title' || this.phase === 'opening' ? 1 : 0,
         layers: this.quality < 1 ? DEFAULT_LAYERS.map((l) => ({ ...l, count: l.count * this.quality })) : DEFAULT_LAYERS,
