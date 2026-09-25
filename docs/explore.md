@@ -71,6 +71,14 @@ He left the choice of the grandchild's leaving line to us: "You pick the line th
 
 What changed: each year is now painted in her hand at that age (`hand` in `src/scene/config.ts`). Nine gets a child's scrubbing strokes, simplified shapes, bright unmixed paint and wobbly outlines. Sixteen is bold and dramatic, forty-nine has practised broken colour, and seventy-two is pale and loose. The grandchild paints in her own crisp, flat style. Where a year isn't painted over, the older hand shows through, so the board reads as paintings on top of each other. The table is in `docs/styles.md`.
 
+## Jeremy on how fast paint flows (2026-09-25, verbatim)
+
+> Do you think the paint fills in slightly too quickly?
+
+> yea, agreed, the paint should flow a bit slower, please try 2 to 3 seconds
+
+What changed: a click covered 16 to 18% of the board in under a second, so the board was full in five or six seconds. Now a pour takes two to three seconds to flow across its shape, and it reaches just as far. Spread passes run at a fixed rate (`SPREAD_PASSES`), not per frame. Slowing it exposed the front growing as a clean octagon, so the paper now takes paint faster in some patches than others (`takes` in `POUR_SPREAD_FS`). The front pushes out in grainy lobes, and where a pour runs out mid-shape its edge is lobed too.
+
 ## Polish after the merge (2026-09-25)
 
 - Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.

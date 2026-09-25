@@ -6,6 +6,8 @@ import {
 
 export const ASPECT = 1.6;
 export const MAX_LAYERS = 10;
+/** Spread passes a second: a pour takes two to three seconds to flow across its shape. */
+const SPREAD_PASSES = 60;
 export const PAPER_RGB: [number, number, number] = [0.953, 0.925, 0.868];
 
 export interface StrokeLayer {
@@ -133,6 +135,8 @@ export class Painter {
   private pSpread: Program;
   private pDown: Program;
   private spreadSet = 0;
+  private spreadDue = 0;
+  private spreadPass = 0;
   readonly coverageW = 160;
   readonly coverageH = 100;
   private coverageBytes = new Uint8Array(160 * 100 * 4);
@@ -433,7 +437,7 @@ export class Painter {
 
   dryMask(dt: number, rate = 0.55): void {
     this.decay(this.mask, 1, Math.exp(-dt * rate));
-    this.decay(this.pour[this.pourIdx], 1, Math.exp(-dt * rate), Math.exp(-dt * 0.8));
+    this.decay(this.pour[this.pourIdx], 1, Math.exp(-dt * rate), Math.exp(-dt * 0.8 * SPREAD_PASSES / 170));
   }
 
   /** Sets the paint inside a box (scene units, y down) at once, keeping whatever it shows now. */
@@ -476,7 +480,9 @@ export class Painter {
   /** Lets poured paint flow on through its region. */
   pourSpread(dt: number, seed: number): void {
     const gl = this.gl;
-    const passes = Math.max(1, Math.min(5, Math.round(dt * 170)));
+    this.spreadDue = Math.min(5, this.spreadDue + dt * SPREAD_PASSES);
+    const passes = Math.floor(this.spreadDue);
+    this.spreadDue -= passes;
     gl.bindVertexArray(this.emptyVao);
     gl.disable(gl.BLEND);
     for (let i = 0; i < passes; i++) {
@@ -489,7 +495,8 @@ export class Painter {
         .tex('uRegion', 1, this.regionTex)
         .i('uSet', this.spreadSet)
         .f('uAspect', ASPECT)
-        .f('uSeed', seed);
+        .f('uSeed', seed)
+        .f('uPass', ++this.spreadPass);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       this.pourIdx = 1 - this.pourIdx;
     }
