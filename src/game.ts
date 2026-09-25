@@ -3,7 +3,7 @@ import { Brush, Coverage } from './brush';
 import { ASPECT, DEFAULT_LAYERS, Painter, type Dab } from './gl/painter';
 import { Narration, type NoteAt } from './narration';
 import { SCENES, type SceneConfig } from './scene/config';
-import { drawFigures, momentSpot, type Spot } from './scene/actors';
+import { drawFigures, drawGhosts, momentSpot, type Spot } from './scene/actors';
 import { drawScene } from './scene/draw';
 import { drawFlow } from './scene/flow';
 import { drawRegions } from './scene/regions';
@@ -16,6 +16,8 @@ const BRUSH_RADIUS = 0.034;
 const WAKE_AT = 0.42;
 /** Seconds from the last opening line to the brush: the card fades, the sketch draws itself, the music starts. */
 const SETTLE = 2.6;
+/** Most notes she gives after a sitting, besides the closing line. Moments are always told; painted things fill the rest. */
+const REFLECT_NOTES = 6;
 /** How fast poured paint dries while painting. Wet paint moves with the view; dry paint keeps its moment. */
 const DRY_RATE = 0.06;
 /** Seconds after a moment is caught before the paint around it sets, holding it mid-wave. */
@@ -55,14 +57,18 @@ export class Game {
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private sceneScale = 0.62;
   private figuresCanvas: HTMLCanvasElement;
+  private ghostsCanvas: HTMLCanvasElement;
+  private ghostsShown = false;
   private moments: Record<string, { state: MomentState; set: boolean; last?: Spot }> = {};
   /** What this sitting's painting holds, in the order it was painted, with where it is. */
-  private kept: { lines: string[]; spot?: Spot }[] = [];
+  private kept: { lines: string[]; spot?: Spot; moment?: boolean }[] = [];
   private introEnd = Infinity;
   private openingQueued = false;
   private musicStarted = false;
   private focus: Spot | null = null;
   private focusAmt = 0;
+  private attn: Spot | null = null;
+  private attnAmt = 0;
   private bellRung = false;
   private paintLeft = Infinity;
   private catchHint = false;
@@ -87,6 +93,9 @@ export class Game {
     this.figuresCanvas = document.createElement('canvas');
     this.figuresCanvas.width = this.sceneCanvas.width;
     this.figuresCanvas.height = this.sceneCanvas.height;
+    this.ghostsCanvas = document.createElement('canvas');
+    this.ghostsCanvas.width = this.sceneCanvas.width;
+    this.ghostsCanvas.height = this.sceneCanvas.height;
 
     this.regionCanvas = document.createElement('canvas');
     this.regionCanvas.width = Math.round(painter.w / 2);
@@ -248,6 +257,7 @@ export class Game {
     }
     this.narration.update(dt);
     this.focusAmt += ((this.focus && this.phase === 'reflect' ? 1 : 0) - this.focusAmt) * Math.min(1, dt * 2.5);
+    this.updateAttention(dt);
     const dabs = this.brush.update(dt);
 
     switch (this.phase) {
@@ -304,7 +314,7 @@ export class Game {
         const ch = this.chapter!;
         this.sceneT += dt;
         this.applyPour(dabs, dt);
-        this.painter.dryMask(dt, DRY_RATE);
+        this.painter.dryMask(dt, DRY_RATE * (this.cfg.pour?.dry ?? 1));
         this.readT -= dt;
         if (this.readT <= 0) {
           this.readT = 0.2;
@@ -336,7 +346,7 @@ export class Game {
 
       case 'drying': {
         const t = this.phaseT;
-        if (!this.baked) this.painter.pourSpread(dt, this.chapterIndex * 7.3);
+        if (!this.baked) this.painter.pourSpread(dt, this.chapterIndex * 7.3, this.cfg.pour?.leak, this.cfg.pour?.run);
         this.painter.dryMask(dt, 3);
         this.sketch = 1 - ramp(t, 0, 1.2);
         if (!this.baked && t >= 1.3) {
@@ -377,6 +387,13 @@ export class Game {
     return this.wakeTimes[id] === undefined ? undefined : this.sceneT - this.wakeTimes[id];
   }
 
+  private pouringOn(spot: Spot): boolean {
+    if (!this.brush.down || this.paintLeft <= 0) return false;
+    const dx = (this.brush.x * ASPECT - spot.x) / (spot.rx + 0.04);
+    const dy = (this.brush.y - spot.y) / (spot.ry + 0.04);
+    return dx * dx + dy * dy <= 1;
+  }
+
   /** A figure stands in front of several shapes, so paint poured on a passing moment covers it whatever is behind. */
   private pourOnMoments(): void {
     for (const [id, m] of Object.entries(this.moments)) {
@@ -394,6 +411,20 @@ export class Game {
       }
       this.painter.pourSeed(seeds, true);
     }
+  }
+
+  /** A soft glow follows whatever is passing and not yet caught, so the eye finds it. */
+  private updateAttention(dt: number): void {
+    let spot: Spot | null = null;
+    if (this.phase === 'painting') {
+      for (const [id, m] of Object.entries(this.moments)) {
+        if (m.state !== 'passing') continue;
+        spot = momentSpot(this.cfg, id, this.sceneT, this.woke(id));
+        if (spot) break;
+      }
+    }
+    if (spot) this.attn = spot;
+    this.attnAmt += ((spot ? 1 : 0) - this.attnAmt) * Math.min(1, dt * (spot ? 1.2 : 3));
   }
 
   private updateBell(): void {
@@ -423,13 +454,13 @@ export class Game {
           m.state = 'gone';
           this.catchHint = false;
           this.view.hideHint();
-          if (def.missed) this.kept.push({ lines: [def.appears, def.missed].filter((l): l is string => !!l), spot: m.last });
-        } else if (this.coverage.wetness(spot.x, spot.y, spot.rx * 0.8, spot.ry) > 0.3) {
+          if (def.missed) this.kept.push({ lines: [def.appears, def.missed].filter((l): l is string => !!l), spot: m.last, moment: true });
+        } else if (this.pouringOn(spot)) {
           m.state = 'caught';
           this.catchHint = false;
           this.view.hideHint();
           this.wakeTimes[def.id] = this.sceneT;
-          this.kept.push({ lines: [def.appears, def.caught, def.after].filter((l): l is string => !!l), spot });
+          this.kept.push({ lines: [def.appears, def.caught, def.after].filter((l): l is string => !!l), spot, moment: true });
           if (!def.ghost) {
             this.pulse = { x: spot.x, y: spot.y, rx: spot.rx * 2.5, ry: spot.ry * 2.5, t: 0 };
             this.audio.wake(spot.x / ASPECT);
@@ -463,8 +494,11 @@ export class Game {
     this.phase = 'reflect';
     this.phaseT = 0;
     const note = (sp: Spot): NoteAt => ({ u: sp.x / ASPECT, v: sp.y, ru: sp.rx / ASPECT, rv: sp.ry });
+    const fixed = (ch.before?.length ?? 0) + (ch.after?.length ?? 0) + this.kept.filter((k) => k.moment).reduce((n, k) => n + k.lines.length, 0);
+    let room = REFLECT_NOTES - fixed;
+    const told = this.kept.filter((k) => k.moment || room-- > 0);
     for (const line of ch.before ?? []) this.narration.push(line, ch.voice);
-    for (const k of this.kept) {
+    for (const k of told) {
       for (const line of k.lines) this.narration.push(line, ch.voice, k.spot ? { at: note(k.spot) } : {});
     }
     for (const line of ch.after ?? []) this.narration.push(line, ch.voice);
@@ -507,7 +541,7 @@ export class Game {
       this.pourHeld = 0;
       if (this.wasDown) this.audio.brushUp();
       this.wasDown = false;
-      this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3);
+      this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3, this.cfg.pour?.leak, this.cfg.pour?.run);
       return;
     }
     if (this.brush.down) {
@@ -517,6 +551,12 @@ export class Game {
       const budget = this.pourBudget;
       const seeds = dabs.filter((_, i) => i % 3 === 0).map((d) => ({ ...d, r: 0.016, strength: budget }));
       if (seeds.length === 0) seeds.push({ x: this.brush.x, y: this.brush.y, r: 0.016, strength: budget, angle: 0, seed: 1 });
+      const splash = this.cfg.pour?.splash ?? 0;
+      if (splash > 0 && Math.random() < dt * 9 * splash) {
+        const a = Math.random() * Math.PI * 2;
+        const d = 0.03 + Math.random() * 0.07;
+        seeds.push({ x: this.brush.x + (Math.cos(a) * d) / ASPECT, y: this.brush.y + Math.sin(a) * d, r: 0.006 + Math.random() * 0.008, strength: 0.03, angle: a, seed: Math.random() * 100 });
+      }
       this.painter.pourSeed(seeds);
       this.pourOnMoments();
       this.audio.brush(this.brush.x, this.brush.y, Math.max(this.brush.speed, 0.5));
@@ -525,7 +565,7 @@ export class Game {
       if (this.wasDown) this.audio.brushUp();
     }
     this.wasDown = this.brush.down;
-    this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3);
+    this.painter.pourSpread(dt, (this.chapterIndex + 1) * 7.3, this.cfg.pour?.leak, this.cfg.pour?.run);
   }
 
   private applyLift(dabs: Dab[], dt: number): void {
@@ -564,8 +604,11 @@ export class Game {
       pulse: this.pulse ? [this.pulse.x, this.pulse.y, this.pulse.rx, this.pulse.ry] as [number, number, number, number] : undefined,
       pulseAmt: this.pulse ? Math.sin(Math.min(1, this.pulse.t / 3.5) * Math.PI) ** 1.5 : 0,
       figures: this.phase === 'painting' || this.phase === 'intro' || (this.phase === 'drying' && !this.baked) ? this.sketch : 0,
+      attn: this.attn ? [this.attn.x, this.attn.y, this.attn.rx * 2 + 0.07, this.attn.ry * 2 + 0.06] as [number, number, number, number] : undefined,
+      attnAmt: this.attnAmt * (0.7 + 0.3 * Math.sin(time * 2.4)),
       focus: this.focus ? [this.focus.x, this.focus.y, this.focus.rx, this.focus.ry] as [number, number, number, number] : undefined,
       focusAmt: this.focusAmt,
+      ghosts: this.ghostsShown ? 1 : 0,
       figureLines: this.cfg.noPencil ? 0 : 1,
       figureBlur: this.cfg.noPencil ? 0.012 : 0,
     };
@@ -597,6 +640,11 @@ export class Game {
       if (this.phase !== 'title' && this.phase !== 'opening') {
         drawFigures(this.figuresCanvas.getContext('2d')!, this.figuresCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke });
         this.painter.uploadFigures(this.figuresCanvas);
+        const hasGhosts = this.cfg.figures.some((g) => g === 'joeGhost' || g === 'fatherGhost');
+        if (hasGhosts || this.ghostsShown) {
+          this.ghostsShown = drawGhosts(this.ghostsCanvas.getContext('2d')!, this.ghostsCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke });
+          this.painter.uploadGhosts(this.ghostsCanvas);
+        }
       }
       this.painter.renderLiving({
         time: this.sceneT * slow,

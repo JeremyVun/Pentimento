@@ -41,6 +41,11 @@ export interface CompositeParams {
   pulseAmt?: number;
   /** How strongly the moving figures show in pencil where the paint isn't alive. */
   figures?: number;
+  /** How strongly the people she only imagines show, over wet paint as well as dry. */
+  ghosts?: number;
+  /** A passing moment, in scene units, glowing softly so the eye finds it. */
+  attn?: [number, number, number, number];
+  attnAmt?: number;
   /** An ellipse in scene units to light while the rest of the painting dims. */
   focus?: [number, number, number, number];
   focusAmt?: number;
@@ -80,6 +85,7 @@ export class Painter {
   private heldIdx = 0;
   private pHold: Program;
   private figuresTex: WebGLTexture;
+  private ghostsTex: WebGLTexture;
   private mask: Target;
   private lift: Target;
   private dry: [Target, Target];
@@ -173,6 +179,7 @@ export class Painter {
     this.flowTex = this.makeInputTexture();
     this.sketchTex = this.makeInputTexture();
     this.figuresTex = this.makeInputTexture();
+    this.ghostsTex = this.makeInputTexture();
 
     this.snaps = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.snaps);
@@ -232,6 +239,10 @@ export class Painter {
 
   uploadFigures(src: TexImageSource): void {
     this.upload(this.figuresTex, src);
+  }
+
+  uploadGhosts(src: TexImageSource): void {
+    this.upload(this.ghostsTex, src);
   }
 
   uploadRegions(src: TexImageSource): void {
@@ -421,7 +432,8 @@ export class Painter {
   }
 
   /** Lets poured paint flow on through its region. */
-  pourSpread(dt: number, seed: number): void {
+  /** `leak` lets paint cross into neighbouring shapes; `run` lets it run downwards in streaks. */
+  pourSpread(dt: number, seed: number, leak = 0, run = 0): void {
     const gl = this.gl;
     const passes = Math.max(1, Math.min(5, Math.round(dt * 170)));
     gl.bindVertexArray(this.emptyVao);
@@ -436,7 +448,9 @@ export class Painter {
         .tex('uRegion', 1, this.regionTex)
         .i('uSet', this.spreadSet)
         .f('uAspect', ASPECT)
-        .f('uSeed', seed);
+        .f('uSeed', seed)
+        .f('uLeak', leak)
+        .f('uRun', run);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       this.pourIdx = 1 - this.pourIdx;
     }
@@ -489,7 +503,11 @@ export class Painter {
       .f('uPulse', ...(c.pulse ?? [0, 0, 1, 1]))
       .f('uPulseAmt', c.pulseAmt ?? 0)
       .tex('uFigures', 8, this.figuresTex)
+      .tex('uGhosts', 9, this.ghostsTex)
+      .f('uGhostAmt', c.ghosts ?? 0)
       .f('uFigAmt', c.figures ?? 0)
+      .f('uAttn', ...(c.attn ?? [0, 0, 1, 1]))
+      .f('uAttnAmt', c.attn ? c.attnAmt ?? 0 : 0)
       .f('uFocus', ...(c.focus ?? [0, 0, 1, 1]))
       .f('uFocusAmt', c.focus ? c.focusAmt ?? 0 : 0)
       .f('uFigLines', c.figureLines ?? 1)

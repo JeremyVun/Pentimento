@@ -8,25 +8,15 @@ const GH = 100;
 export class Coverage {
   readonly grid = new Float32Array(GW * GH);
   private poured = new Float32Array(GW * GH);
-  private wet = new Float32Array(GW * GH);
 
   clear(): void {
     this.grid.fill(0);
     this.poured.fill(0);
-    this.wet.fill(0);
   }
 
   /** Takes the GPU's coarse map of poured paint (RGBA bytes, GW x GH, rows from the top). */
   setPoured(bytes: Uint8Array): void {
-    for (let i = 0; i < GW * GH; i++) {
-      this.poured[i] = bytes[i * 4] / 255;
-      this.wet[i] = bytes[i * 4 + 1] / 255;
-    }
-  }
-
-  /** Mean wetness of the paint inside an ellipse in scene units. */
-  wetness(cx: number, cy: number, rx: number, ry: number): number {
-    return this.mean(cx, cy, rx, ry, (i) => this.wet[i]);
+    for (let i = 0; i < GW * GH; i++) this.poured[i] = bytes[i * 4] / 255;
   }
 
   private at(i: number): number {

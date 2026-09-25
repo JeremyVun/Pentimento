@@ -362,6 +362,8 @@ uniform sampler2D uRegion;
 uniform float uAspect;
 uniform float uSeed;
 uniform int uSet;
+uniform float uLeak;
+uniform float uRun;
 out vec4 outColor;
 const ivec2 SET_A[8] = ivec2[8](ivec2(2, 0), ivec2(-2, 0), ivec2(0, 2), ivec2(0, -2), ivec2(1, 1), ivec2(1, -1), ivec2(-1, 1), ivec2(-1, -1));
 const ivec2 SET_B[8] = ivec2[8](ivec2(2, 1), ivec2(-2, -1), ivec2(1, -2), ivec2(-1, 2), ivec2(2, -1), ivec2(-2, 1), ivec2(1, 2), ivec2(-1, -2));
@@ -380,8 +382,10 @@ void main() {
     ivec2 q = clamp(p + o, ivec2(0), size - 1);
     float nb = texelFetch(uPour, q, 0).r;
     if (nb <= 0.0) continue;
-    float cand = nb - length(vec2(o)) * unit;
-    if (rid(q) != me) cand = min(cand, 0.004);
+    float len = length(vec2(o));
+    float runs = uRun * max(0.0, -float(o.y)) / len * smoothstep(0.35, 0.75, vnoise(vec2(q0.x * 60.0 + uSeed, 0.5)));
+    float cand = nb - len * unit * (1.0 - min(0.9, runs));
+    if (rid(q) != me) cand = max(min(cand, 0.004), cand * uLeak);
     best = max(best, cand);
   }
   float wet = c.g;
@@ -448,10 +452,14 @@ uniform float uDryFade;
 uniform vec4 uPulse;
 uniform float uPulseAmt;
 uniform sampler2D uFigures;
+uniform sampler2D uGhosts;
+uniform float uGhostAmt;
 uniform float uFigAmt;
 uniform float uFigLines;
 uniform vec4 uFocus;
 uniform float uFocusAmt;
+uniform vec4 uAttn;
+uniform float uAttnAmt;
 uniform float uFigBlur;
 out vec4 outColor;
 
@@ -474,6 +482,26 @@ float sketchEdge(vec2 uv) { return edgeOf(uSketch, uv); }
 
 vec3 graphiteOver(vec3 c) {
   return mix(c * 0.58 + vec3(0.03, 0.03, 0.035), c + vec3(0.18), smoothstep(0.42, 0.2, lum(c)));
+}
+
+/** Moving figures in pencil: a pale silhouette, graphite edges, and reds and yellows in colour. */
+vec3 pencilFigures(vec3 col, sampler2D tex, vec2 uv, float away, float tooth) {
+  vec2 j = vec2(snoise(uv * 40.0 + 3.0), snoise(uv * 40.0 + 11.0)) * 0.0008;
+  float line = smoothstep(0.3, 0.85, edgeOf(tex, uv + j));
+  line *= 0.6 + 0.4 * tooth;
+  vec3 fc = texture(tex, uv).rgb;
+  if (uFigBlur > 0.0) {
+    vec2 b = vec2(uFigBlur / uAspect, uFigBlur);
+    fc = (fc + texture(tex, uv + b).rgb + texture(tex, uv - b).rgb
+      + texture(tex, uv + vec2(b.x, -b.y)).rgb + texture(tex, uv + vec2(-b.x, b.y)).rgb) / 5.0;
+  }
+  float body = smoothstep(0.04, 0.2, length(vec3(1.0) - fc));
+  col = mix(col, uPaperCol * 0.96, body * away * 0.45 * uFigLines);
+  col = mix(col, graphiteOver(col), clamp(line * away, 0.0, 1.0) * 0.8 * uFigLines);
+  vec3 fh = rgb2hsv(fc);
+  float hd = min(abs(fh.x - 0.07), 1.0 - abs(fh.x - 0.07));
+  float warm = smoothstep(0.55, 0.75, fh.y) * smoothstep(0.09, 0.065, hd);
+  return mix(col, fc * 0.95, warm * away * 0.85);
 }
 
 float poured(vec2 uv) {
@@ -564,26 +592,19 @@ void main() {
   }
 
   if (uFigAmt > 0.001 && uBake < 0.5 && uLiftMode < 0.5) {
-    vec2 j = vec2(snoise(uv * 40.0 + 3.0), snoise(uv * 40.0 + 11.0)) * 0.0008;
-    float line = smoothstep(0.3, 0.85, edgeOf(uFigures, uv + j));
-    line *= 0.6 + 0.4 * tooth;
-    float away = (1.0 - alive) * uFigAmt;
-    vec3 fc = texture(uFigures, uv).rgb;
-    if (uFigBlur > 0.0) {
-      vec2 b = vec2(uFigBlur / uAspect, uFigBlur);
-      fc = (fc + texture(uFigures, uv + b).rgb + texture(uFigures, uv - b).rgb
-        + texture(uFigures, uv + vec2(b.x, -b.y)).rgb + texture(uFigures, uv + vec2(-b.x, b.y)).rgb) / 5.0;
-    }
-    float body = smoothstep(0.04, 0.2, length(vec3(1.0) - fc));
-    col = mix(col, uPaperCol * 0.96, body * away * 0.45 * uFigLines);
-    col = mix(col, graphiteOver(col), clamp(line * away, 0.0, 1.0) * 0.8 * uFigLines);
-    vec3 fh = rgb2hsv(fc);
-    float hd = min(abs(fh.x - 0.07), 1.0 - abs(fh.x - 0.07));
-    float warm = smoothstep(0.55, 0.75, fh.y) * smoothstep(0.09, 0.065, hd);
-    col = mix(col, fc * 0.95, warm * away * 0.85);
+    col = pencilFigures(col, uFigures, uv, (1.0 - alive) * uFigAmt, tooth);
+    if (uGhostAmt > 0.001) col = pencilFigures(col, uGhosts, uv, uGhostAmt * uFigAmt, tooth);
   }
 
   if (uBake > 0.5) { outColor = vec4(col, 1.0); return; }
+
+  if (uAttnAmt > 0.001) {
+    vec2 ad = (uv * vec2(uAspect, 1.0) - uAttn.xy) / uAttn.zw;
+    float r2 = dot(ad, ad);
+    float halo = (exp(-r2 * 1.4) * 0.65 + exp(-r2 * 6.0) * 0.35) * uAttnAmt;
+    vec3 gold = col * vec3(1.02, 0.9, 0.62) + vec3(0.12, 0.09, 0.02);
+    col = mix(col, gold, clamp(halo, 0.0, 1.0));
+  }
 
   if (uPulseAmt > 0.001) {
     vec2 pd = (uv * vec2(uAspect, 1.0) - uPulse.xy) / uPulse.zw;

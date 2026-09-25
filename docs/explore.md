@@ -49,6 +49,15 @@ Core loop to test, "wet paint lives, dry paint keeps the moment":
 
 > i think the issue is still that as a user i am watching the painting, but also having to read text underneath.
 
+## Polish after the merge (2026-09-25)
+
+- Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.
+- A warm glow breathes around whatever is passing and not yet caught (`uAttn`).
+- The people she only imagines (her father, Joe at seventy-two) are drawn on their own pencil layer that shows over wet paint too (`drawGhosts`).
+- Her age in the paint (`pour` in the scene config): at nine the paint spills into neighbouring shapes and splashes; at forty-four it bleeds, runs down in streaks and dries slowly.
+- After a sitting she gives at most six notes before the closing line. Moments are always told; painted things fill the rest.
+- Still to judge in motion: whether pencil Joe at seventy-two is noticeable enough.
+
 ## Prototype 2: reading and painting at separate times (built 2026-09-25)
 
 - No text while painting. The music, the view and the moments carry the sitting. Only the first chapter's two functional hints remain, under the board.

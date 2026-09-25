@@ -13,8 +13,6 @@ export interface Frame {
   woke: Record<string, number | undefined>;
   /** Set only when drawing the region map: called with the region each element belongs to. */
   region?: (id: number) => void;
-  /** Set only for the pencil layer: draws the people she expects to see who aren't there. */
-  ghosts?: boolean;
 }
 
 export function drawScene(ctx: CanvasRenderingContext2D, H: number, f: Frame): void {

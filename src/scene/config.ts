@@ -61,6 +61,8 @@ export interface SceneConfig {
   trainArrives?: boolean;
   /** Her eyes have gone: no pencil lines, only blurred colour. */
   noPencil?: boolean;
+  /** How her paint behaves that year: spilling into neighbouring shapes, splashing, running down. */
+  pour?: { leak?: number; splash?: number; run?: number; dry?: number };
 }
 
 const base: Palette = {
@@ -117,6 +119,7 @@ export const SCENES: Record<string, SceneConfig> = {
     town: 0, bridge: 'none', ferry: 'active',
     fig: { size: 0.04, leaves: 'stick' },
     figures: ['father', 'ferryman'], birds: 'swallows', wind: 0.4, duration: 80, moments: { ferry: 40 },
+    pour: { leak: 0.55, splash: 1 },
   },
 
   sixteen: {
@@ -213,6 +216,7 @@ export const SCENES: Record<string, SceneConfig> = {
     fig: { size: 0.62, leaves: 'none', broken: true },
     bench: true,
     figures: ['lanterns', 'fatherGhost'], weather: 'storm', kitchenLight: true, wind: 1, lightning: true, duration: 80, moments: { father: 36 },
+    pour: { leak: 0.3, run: 0.75, dry: 0.6 },
   },
 
   fortynine: {

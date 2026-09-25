@@ -375,6 +375,27 @@ function fatherGhostAt(c: Frame['cfg'], t: number, woke: number | undefined): { 
   return { x: FIG_BASE[0] + 0.06, y: FIG_BASE[1] - 0.02 };
 }
 
+/**
+ * The people she expects to see who aren't there, alone on white paper. They show in pencil over everything,
+ * wet paint included, because they are only in her head. Returns whether anyone was drawn.
+ */
+export function drawGhosts(ctx: CanvasRenderingContext2D, H: number, f: Frame): boolean {
+  const c = f.cfg;
+  const joe = joeOnBridge(c, f.t, f.woke.joeGhost, true);
+  const dad = fatherGhostAt(c, f.t, f.woke.father);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.setTransform(H, 0, 0, H, 0, 0);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (joe) person(ctx, joe.x, BRIDGE.top + 0.002, 0.054, JOE, { walk: joe.walkT * 6 });
+  if (dad) person(ctx, dad.x, dad.y, 0.11, { coat: '#eee8da', legs: '#4a5a7a', hair: '#8a8078', skin: '#e0ae8e' }, {});
+  ctx.restore();
+  return !!(joe || dad);
+}
+
 /** The people, boats and birds that move, alone on white paper, for the pencil layer. */
 export function drawFigures(ctx: CanvasRenderingContext2D, H: number, f: Frame): void {
   ctx.save();
@@ -384,7 +405,6 @@ export function drawFigures(ctx: CanvasRenderingContext2D, H: number, f: Frame):
   ctx.setTransform(H, 0, 0, H, 0, 0);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  f = { ...f, ghosts: true };
   drawTrain(ctx, f);
   drawBridgeFigures(ctx, f);
   if (f.cfg.ferry === 'active') drawFerryBoat(ctx, f);
@@ -397,8 +417,6 @@ export function drawFigures(ctx: CanvasRenderingContext2D, H: number, f: Frame):
 export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void {
   const c = f.cfg;
   const y = BRIDGE.top + 0.002;
-  const ghost = f.ghosts ? joeOnBridge(c, f.t, f.woke.joeGhost, true) : null;
-  if (ghost) person(ctx, ghost.x, y, 0.054, JOE, { walk: ghost.walkT * 6 });
   const joe = joeOnBridge(c, f.t, f.woke.joe);
   if (joe) {
     const w = f.woke.joe;
@@ -633,8 +651,6 @@ export function drawGardenFigures(ctx: CanvasRenderingContext2D, f: Frame): void
     person(ctx, kid.x, kid.y - bob, 0.075, { coat: '#f2c94c', legs: '#4a7ab8', hair: '#6a4a36', skin: '#eab99a', child: true },
       waving ? { wave: wk * 8, bothArms: true } : { armUp: 0.8 });
   }
-  const dad = f.ghosts ? fatherGhostAt(c, f.t, f.woke.father) : null;
-  if (dad) person(ctx, dad.x, dad.y, 0.11, { coat: '#eee8da', legs: '#4a5a7a', hair: '#8a8078', skin: '#e0ae8e' }, {});
   if (c.figures.includes('june')) {
     person(ctx, 0.46, 0.94, 0.15, { coat: '#d6402f', legs: '#3b3f52', hair: '#4a3428', skin: '#e3b596', long: true }, {});
   }
