@@ -63,6 +63,12 @@ What changed:
 - The board fills the window, and Begin goes full screen. Hints, notes and buttons sit on the board.
 - The town grows across the life: houses spread across the fields after the bridge opens, a mill smokes at forty-four and is cold by seventy-two, telegraph poles, houses up the hill, flats by the church, and wind turbines at the end.
 
+## Jeremy on her age in the painting (2026-09-25, verbatim)
+
+> do you think we can also change the look of the painting? a 9 year old would paint something that looks a bit different than someone who is older and has many more years of painting no? the difference doesn't have to be too exaggerated, but noticeable enough. So pentimento really does feel like different paintings ontop of one another, instead of just the same painting in different scenes.
+
+He left the choice of the grandchild's leaving line to us: "You pick the line that you think works best for this game". The train note now says she moved away at eighteen, like June.
+
 ## Polish after the merge (2026-09-25)
 
 - Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.
