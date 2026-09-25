@@ -1,6 +1,7 @@
 import type { AudioEngine } from './audio';
 import { Brush, Coverage } from './brush';
-import { ASPECT, DEFAULT_LAYERS, Painter, type Dab } from './gl/painter';
+import { ASPECT, Painter, type Dab } from './gl/painter';
+import { handOf, livingParams, needsMip } from './hand';
 import { Narration, type NoteAt } from './narration';
 import { SCENES, type SceneConfig } from './scene/config';
 import { drawFigures, drawGhosts, momentSpot, type Spot } from './scene/actors';
@@ -150,8 +151,8 @@ export class Game {
       this.setScene(SCENES[CHAPTERS[j].id]);
       this.painter.fillMask();
       drawScene(this.sceneCtx, this.sceneCanvas.height, { cfg: this.cfg, t: 20, sketch: false, woke: {} });
-      this.painter.uploadScene(this.sceneCanvas, !!this.cfg.blur);
-      this.painter.renderLiving({ time: 20, warp: 1, blur: this.cfg.blur ?? 0, strokeScale: this.cfg.blur ? 1.7 : 1, angle: 0, follow: 1, layers: DEFAULT_LAYERS });
+      this.painter.uploadScene(this.sceneCanvas, needsMip(this.cfg));
+      this.painter.renderLiving(livingParams(this.cfg, 20, { follow: 1 }));
       this.painter.bake(j);
     }
     this.startChapter(i);
@@ -322,7 +323,7 @@ export class Game {
         const ch = this.chapter!;
         this.sceneT += dt;
         this.applyPour(dabs, dt);
-        this.painter.dryMask(dt, DRY_RATE * (this.cfg.pour?.dry ?? 1));
+        this.painter.dryMask(dt, DRY_RATE * handOf(this.cfg).dry);
         this.readT -= dt;
         if (this.readT <= 0) {
           this.readT = 0.2;
@@ -676,7 +677,7 @@ export class Game {
       const woke: Record<string, number> = {};
       for (const [k, v] of Object.entries(this.wakeTimes)) woke[k] = this.sceneT - v;
       drawScene(this.sceneCtx, this.sceneCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke });
-      this.painter.uploadScene(this.sceneCanvas, !!this.cfg.blur);
+      this.painter.uploadScene(this.sceneCanvas, needsMip(this.cfg));
       const slow = this.reducedMotion ? 0.4 : 1;
       if (this.phase !== 'title' && this.phase !== 'opening') {
         drawFigures(this.figuresCanvas.getContext('2d')!, this.figuresCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke });
@@ -687,15 +688,11 @@ export class Game {
           this.painter.uploadGhosts(this.ghostsCanvas);
         }
       }
-      this.painter.renderLiving({
-        time: this.sceneT * slow,
+      this.painter.renderLiving(livingParams(this.cfg, this.sceneT * slow, {
         warp: this.reducedMotion ? 0.3 : 1,
-        blur: this.cfg.blur ?? 0,
-        strokeScale: this.cfg.blur ? 1.7 : this.cfg.pour?.strokes ?? 1,
-        angle: 0,
         follow: this.phase === 'title' || this.phase === 'opening' ? 1 : 0,
-        layers: this.quality < 1 ? DEFAULT_LAYERS.map((l) => ({ ...l, count: l.count * this.quality })) : DEFAULT_LAYERS,
-      });
+        quality: this.quality,
+      }));
     }
     this.painter.present(this.compositeParams(time));
   }

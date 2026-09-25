@@ -1,3 +1,4 @@
+import type { HandLook } from '../gl/painter';
 export interface Palette {
   sky0: string; sky1: string; sky2: string;
   sun: string; sunGlow: string;
@@ -61,8 +62,17 @@ export interface SceneConfig {
   trainArrives?: boolean;
   /** Her eyes have gone: no pencil lines, only blurred colour. */
   noPencil?: boolean;
-  /** How her paint looks that year: stroke size, and how slowly it dries. Filling always works the same way. */
-  pour?: { strokes?: number; dry?: number };
+  /** How she paints that year. Her age shows in how the paint looks; pouring always works the same way. */
+  hand?: Partial<Hand>;
+}
+
+export interface Hand extends HandLook {
+  /** Brush size. */
+  strokes: number;
+  /** How much fine brushwork she adds: 0 is broad strokes only. */
+  detail: number;
+  /** How fast the paint dries: below 1 is slower. */
+  dry: number;
 }
 
 const base: Palette = {
@@ -119,7 +129,7 @@ export const SCENES: Record<string, SceneConfig> = {
     town: 0, bridge: 'none', ferry: 'active',
     fig: { size: 0.04, leaves: 'stick' },
     figures: ['father', 'ferryman'], birds: 'swallows', wind: 0.4, duration: 80, moments: { ferry: 40 },
-    pour: { strokes: 1.35 },
+    hand: { strokes: 1.45, detail: 0.3, simplify: 1.3, sat: 1.2, tin: 0.55, outline: 0.9, scrub: 1, broken: 0.5 },
   },
 
   sixteen: {
@@ -144,6 +154,7 @@ export const SCENES: Record<string, SceneConfig> = {
     town: 0.2, bridge: 'building', ferry: 'active',
     fig: { size: 0.24, leaves: 'autumn' },
     figures: ['workers', 'ferryman', 'train'], birds: 'gulls', weather: 'leaves', wind: 0.8, duration: 80, moments: { train: 44 },
+    hand: { strokes: 1.3, detail: 0.55, simplify: 1, sat: 1.3, contrast: 1.2, tin: 0.1, outline: 0.2, scrub: 0.7, broken: 0.8 },
   },
 
   twentythree: {
@@ -166,6 +177,7 @@ export const SCENES: Record<string, SceneConfig> = {
     town: 0.4, bridge: 'built', lamps: 'off', ferry: 'moored',
     fig: { size: 0.36, leaves: 'spring' },
     figures: ['joeBridge'], weather: 'rain', cherry: true, wind: 0.3, duration: 85, moments: { joe: 34 }, bellAt: 33.4,
+    hand: { strokes: 0.9, detail: 1.2, simplify: 0.2, sat: 1.1, contrast: 0.95, scrub: 0.1, broken: 1.4 },
   },
 
   thirtyone: {
@@ -189,6 +201,7 @@ export const SCENES: Record<string, SceneConfig> = {
     fig: { size: 0.5, leaves: 'summer', fruit: true },
     bench: true, washing: true,
     figures: ['joeGarden', 'swimmers', 'kidsBridge'], birds: 'swallows', wind: 0.5, duration: 50, moments: { kids: 14 },
+    hand: { strokes: 1.5, detail: 0.4, simplify: 0.9, sat: 1.15, contrast: 1.05, scrub: 0.8, broken: 1 },
   },
 
   fortyfour: {
@@ -216,7 +229,7 @@ export const SCENES: Record<string, SceneConfig> = {
     fig: { size: 0.62, leaves: 'none', broken: true },
     bench: true,
     figures: ['lanterns', 'fatherGhost'], weather: 'storm', kitchenLight: true, wind: 1, lightning: true, duration: 80, moments: { father: 36 },
-    pour: { dry: 0.6 },
+    hand: { dry: 0.6, strokes: 1.2, detail: 0.7, simplify: 0.7, sat: 0.75, contrast: 0.9, scrub: 0.3, broken: 1.4 },
   },
 
   fortynine: {
@@ -240,6 +253,7 @@ export const SCENES: Record<string, SceneConfig> = {
     fig: { size: 0.7, leaves: 'autumn', fruit: true },
     bench: true, beans: 'green',
     figures: ['bus', 'joeBeans'], weather: 'leaves', mist: true, wind: 0.3, duration: 80, moments: { bus: 24 }, bellAt: 23.4,
+    hand: { strokes: 0.85, detail: 1.35, sat: 1, broken: 1.8 },
   },
 
   seventytwo: {
@@ -266,6 +280,7 @@ export const SCENES: Record<string, SceneConfig> = {
     fig: { size: 0.78, leaves: 'none', snow: true, broken: true },
     bench: true, beans: 'bare',
     figures: ['joeGhost'], birds: 'robin', weather: 'snow', wind: 0.15, duration: 95, moments: { joeGhost: 26.6, robin: 52 }, bellAt: 26,
+    hand: { strokes: 1.3, detail: 0.55, simplify: 0.9, sat: 0.75, contrast: 0.85, scrub: 0.2, broken: 1.5 },
   },
 
   eightysix: {
@@ -287,6 +302,7 @@ export const SCENES: Record<string, SceneConfig> = {
     fig: { size: 0.88, leaves: 'spring' },
     bench: true,
     figures: ['child', 'june'], weather: 'petals', cherry: true, window: true, blur: 0.011, wind: 0.3, duration: 85, moments: { child: 24 }, noPencil: true,
+    hand: { strokes: 1.7, contrast: 0.9, broken: 1.4 },
   },
 
   later: {
@@ -301,5 +317,6 @@ export const SCENES: Record<string, SceneConfig> = {
     fig: { size: 1, leaves: 'summer', fruit: true },
     bench: true,
     figures: ['kidsBridge', 'rower', 'train'], birds: 'swallows', wind: 0.4, duration: 85, moments: { train: 26, kids: 58 }, trainArrives: true,
+    hand: { strokes: 0.9, detail: 1.1, sat: 1.15, contrast: 1.15, broken: 0.35 },
   },
 };

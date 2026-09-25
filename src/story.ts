@@ -277,7 +277,7 @@ export const CHAPTERS: Chapter[] = [
     moments: [
       {
         id: 'train',
-        appears: 'I came home on the afternoon train, the one Gran used to watch.',
+        appears: 'I moved away when I was eighteen, like Mum did. I came home on the afternoon train, the one Gran used to watch.',
         caught: "She wanted to be on it when she was sixteen. I've been on it more times than I can count.",
         missed: 'Gran wanted to be on that train when she was sixteen. She never did get on it.',
       },

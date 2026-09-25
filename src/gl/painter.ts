@@ -1,6 +1,6 @@
 import { GL, Program, Target, bindTarget, clearTarget, createTarget } from './gl';
 import {
-  BASE_FS, COMPOSITE_FS, DAB_FS, DAB_VS, FULLSCREEN_VS, HOLD_FS, PAPER_FS, POUR_DOWN_FS, POUR_SEED_FS, POUR_SEED_VS, POUR_SPREAD_FS,
+  BASE_FS, COMPOSITE_FS, DAB_FS, DAB_VS, FULLSCREEN_VS, HOLD_FS, OUTLINE_FS, PAPER_FS, POUR_DOWN_FS, POUR_SEED_FS, POUR_SEED_VS, POUR_SPREAD_FS,
   STROKE_FS, STROKE_VS,
 } from './shaders';
 
@@ -18,6 +18,24 @@ export interface StrokeLayer {
   opacity: number;
 }
 
+/** How the paint looks in a given year's hand. */
+export interface HandLook {
+  /** Mip levels of the view blurred away before painting, so small things become blobs. */
+  simplify: number;
+  sat: number;
+  contrast: number;
+  /** 0..1 pull towards the unmixed colours of a child's tin of paints. */
+  tin: number;
+  /** 0..1 dark painted outline around shapes. */
+  outline: number;
+  /** 0..1 strokes going every which way instead of following the forms. */
+  scrub: number;
+  /** How much colour varies stroke to stroke; 1 is the usual. */
+  broken: number;
+}
+
+export const PLAIN_HAND: HandLook = { simplify: 0, sat: 1, contrast: 1, tin: 0, outline: 0, scrub: 0, broken: 1 };
+
 export interface LivingParams {
   time: number;
   warp: number;
@@ -27,6 +45,7 @@ export interface LivingParams {
   layers: StrokeLayer[];
   /** 1 makes the held picture follow the living view everywhere, wet or not. */
   follow: number;
+  hand: HandLook;
 }
 
 export interface CompositeParams {
@@ -100,6 +119,7 @@ export class Painter {
   private pDab: Program;
   private pComposite: Program;
   private pDecay: Program;
+  private pOutline: Program;
   private emptyVao: WebGLVertexArrayObject;
   private dabVao: WebGLVertexArrayObject;
   private dabBuf: WebGLBuffer;
@@ -137,6 +157,7 @@ export class Painter {
     this.pDab = new Program(gl, DAB_VS, DAB_FS);
     this.pComposite = new Program(gl, FULLSCREEN_VS, COMPOSITE_FS);
     this.pDecay = new Program(gl, FULLSCREEN_VS, DECAY_FS);
+    this.pOutline = new Program(gl, FULLSCREEN_VS, OUTLINE_FS);
     this.pSeed = new Program(gl, POUR_SEED_VS, POUR_SEED_FS);
     this.pSpread = new Program(gl, FULLSCREEN_VS, POUR_SPREAD_FS);
     this.pDown = new Program(gl, FULLSCREEN_VS, POUR_DOWN_FS);
@@ -288,6 +309,8 @@ export class Painter {
 
   renderLiving(p: LivingParams): void {
     const gl = this.gl;
+    const h = p.hand;
+    const lod = this.sceneMip ? h.simplify : 0;
     bindTarget(gl, this.living);
     gl.bindVertexArray(this.emptyVao);
     gl.disable(gl.BLEND);
@@ -297,7 +320,11 @@ export class Painter {
       .f('uTime', p.time)
       .f('uAspect', ASPECT)
       .f('uWarp', p.warp)
-      .f('uBlur', this.sceneMip ? p.blur : 0);
+      .f('uBlur', this.sceneMip ? p.blur : 0)
+      .f('uLod', lod)
+      .f('uSat', h.sat)
+      .f('uContrast', h.contrast)
+      .f('uTin', h.tin);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     gl.enable(gl.BLEND);
@@ -309,7 +336,12 @@ export class Painter {
       .f('uAspect', ASPECT)
       .f('uTime', p.time)
       .f('uAngle', p.angle)
-      .f('uLod', this.sceneMip ? p.blur * 60 : 0);
+      .f('uLod', this.sceneMip ? p.blur * 60 + h.simplify : 0)
+      .f('uSat', h.sat)
+      .f('uContrast', h.contrast)
+      .f('uTin', h.tin)
+      .f('uScrub', h.scrub)
+      .f('uBroken', h.broken);
     const k = (this.h / 1000) * p.strokeScale;
     const areaK = (1 / (p.strokeScale * p.strokeScale));
     p.layers.forEach((l, i) => {
@@ -322,6 +354,16 @@ export class Painter {
       const count = Math.min(40000, Math.round(l.count * areaK));
       gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
     });
+    if (h.outline > 0) {
+      gl.bindVertexArray(this.emptyVao);
+      this.pOutline.use()
+        .tex('uScene', 0, this.sceneTex)
+        .f('uRes', this.w, this.h)
+        .f('uAspect', ASPECT)
+        .f('uLod', lod)
+        .f('uOutline', h.outline);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
     gl.disable(gl.BLEND);
     this.hold(p.follow);
   }
