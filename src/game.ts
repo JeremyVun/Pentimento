@@ -24,11 +24,11 @@ const DRY_RATE = 0.06;
 /** How much further paint reaches for each second the button is held. */
 const REACH_PER_SEC = 0.4;
 /** Where a drag has already been keeps spreading while the button is held, more slowly than under the cursor and only so far. */
-const TRAIL_REACH_PER_SEC = 0.1;
-const TRAIL_MAX = 0.15;
+const TRAIL_REACH_PER_SEC = 0.2;
+const TRAIL_MAX = 0.25;
 /** A quick click starts with a small pool; each new spot along a drag with a smaller one. */
 const CLICK_REACH = 0.06;
-const TRAIL_START = 0.025;
+const TRAIL_START = 0.04;
 /** Spots along a drag sit about a pool's width apart, so their paint doesn't pile up where they overlap. */
 const SPOT_GAP = 0.03;
 /** Seconds after a moment is caught before the paint around it sets, holding it mid-wave. */

@@ -105,6 +105,10 @@ Every spot a press passes over now keeps spreading for as long as the button is 
 
 Spots along a drag now sit about a pool's width apart so their paint doesn't pile up, start smaller than a click (`TRAIL_START`), and widen at a quarter of the speed up to a limit (`TRAIL_REACH_PER_SEC`, `TRAIL_MAX`). The spot under the cursor still spreads at full speed while you hold still. A one-second scribble across the sky leaves a band of about 9% of the board.
 
+> ok great, the spread is a bit too slow now. how can we increase the spread rate / speed?
+
+Doubled the band's speed (`TRAIL_REACH_PER_SEC` 0.2), let it widen further (`TRAIL_MAX` 0.25) and start thicker (`TRAIL_START` 0.04). A 0.9-second scribble across the sky now leaves about 13% of the board. Holding still is unchanged.
+
 ## Polish after the merge (2026-09-25)
 
 - Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.
