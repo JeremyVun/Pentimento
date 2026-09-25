@@ -95,7 +95,11 @@ A moving mouse drops paint in many places, and the overlapping patches hide the 
 
 > I feel like the paint should stop filling whne the player stops holding their mouse button down
 
-Paint now flows only while the button is held (`pourAdd` in `src/gl/painter.ts`, `REACH_PER_SEC` in `src/game.ts`). Holding adds to the paint already under the cursor, so holding on old paint pushes it further straight away. A click leaves a small pool (`CLICK_REACH`), a second's hold covers about as much as a click used to, and a drag leaves a band of paint. Spread passes run at 360 a second so the paint keeps up and stops within a moment of letting go. The first hint now says to hold the button down.
+Paint now flows only while the button is held (`pourAdd` in `src/gl/painter.ts`, `REACH_PER_SEC` in `src/game.ts`). Holding adds to the paint already under the cursor, so holding on old paint pushes it further straight away. A click leaves a small pool (`CLICK_REACH`), and a second's hold covers about as much as a click used to. Spread passes run at 360 a second so the paint keeps up and stops within a moment of letting go. The first hint now says to hold the button down.
+
+> ok, it feels better when you click and hold but it feels way worse when you click and move your mouse around without the spread
+
+Every spot a press passes over now keeps spreading for as long as the button is held (`pourSpots`), so a drag leaves a band that widens while you hold, and everything stops when you let go.
 
 ## Polish after the merge (2026-09-25)
 

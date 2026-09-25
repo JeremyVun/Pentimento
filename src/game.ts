@@ -23,7 +23,7 @@ const REFLECT_NOTES = 6;
 const DRY_RATE = 0.06;
 /** How much further paint reaches for each second the button is held. */
 const REACH_PER_SEC = 0.4;
-/** A quick click still leaves a small pool. */
+/** A quick click, or each new spot a drag passes over, starts with a small pool. */
 const CLICK_REACH = 0.06;
 /** Seconds after a moment is caught before the paint around it sets, holding it mid-wave. */
 const SETS_AFTER: Record<string, number> = { joe: 3.5, ferry: 2.5, train: 0.8, bus: 2, robin: 2.6 };
@@ -47,6 +47,8 @@ export class Game {
   private sketchCanvas: HTMLCanvasElement;
   private regionCanvas: HTMLCanvasElement;
   private pourHeld = 0;
+  /** Every spot this press has poured on. They all keep spreading until the button is let go. */
+  private pourSpots: { x: number; y: number }[] = [];
   private readT = 0;
   private coverage = new Coverage();
   private liftGrid = new Coverage();
@@ -253,6 +255,7 @@ export class Game {
     for (const m of ch.moments ?? []) this.moments[m.id] = { state: 'waiting', set: false };
     this.bellRung = false;
     this.paintLeft = ch.paint ?? Infinity;
+    this.pourSpots = [];
     this.finishAt = Infinity;
     this.brush.scale = ch.brush ?? 1;
     this.living = 1;
@@ -600,13 +603,21 @@ export class Game {
       this.paintLeft -= dt;
       if (this.paintLeft <= 0) this.finishAt = this.phaseT + 2.5;
       this.pourHeld += dt;
-      const at = dabs.length ? dabs : [{ x: this.brush.x, y: this.brush.y, r: 0, strength: 0, angle: 0, seed: 1 }];
-      const add = ((REACH_PER_SEC * dt + (this.wasDown ? 0 : CLICK_REACH)) * (this.chapter?.brush ?? 1)) / at.length;
-      this.painter.pourAdd(at.map((d) => ({ ...d, r: 0.016, strength: add })), 0.1 + this.pourBudget);
+      if (!this.wasDown) this.pourSpots = [];
+      const k = this.chapter?.brush ?? 1;
+      const seeds: Dab[] = this.pourSpots.map((p) => ({ x: p.x, y: p.y, r: 0.016, strength: REACH_PER_SEC * dt * k, angle: 0, seed: 1 }));
+      const at = dabs.length ? dabs : [{ x: this.brush.x, y: this.brush.y }];
+      for (const d of at) {
+        if (this.pourSpots.length >= 500 || this.pourSpots.some((p) => Math.abs(p.x - d.x) < 0.012 && Math.abs(p.y - d.y) < 0.012)) continue;
+        this.pourSpots.push({ x: d.x, y: d.y });
+        seeds.push({ x: d.x, y: d.y, r: 0.016, strength: (CLICK_REACH + REACH_PER_SEC * dt) * k, angle: 0, seed: 1 });
+      }
+      this.painter.pourAdd(seeds, 0.1 + this.pourBudget);
       this.pourOnMoments();
       this.audio.brush(this.brush.x, this.brush.y, Math.max(this.brush.speed, 0.5));
     } else {
       this.pourHeld = 0;
+      this.pourSpots = [];
       if (this.wasDown) this.audio.brushUp();
     }
     this.wasDown = this.brush.down;
