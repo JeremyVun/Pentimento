@@ -32,7 +32,7 @@ Semantics:
 
 - `unlock()` is called inside the first user gesture. It creates or resumes the AudioContext. It is idempotent and safe to call on every gesture.
 - `play(id, durationSec)` crossfades (about 3 s) from whatever is playing into score `id`. For chapter scores, `durationSec` is the painting time. The score reaches its final cadence at `durationSec`, then holds a soft tail until `endChapter()` or the next `play()`. `title` and `lift` loop indefinitely and ignore `durationSec`. Calling `play` with the id already playing does nothing.
-- `endChapter()` means painting has finished, possibly early. The cadence plays within the next bar and rings for about 6 s. The ambience bed stays on quietly until the next `play()`.
+- `endChapter()` means the sitting is over, possibly early. The game calls it as her closing line begins, so the score plays on under her notes about the painting. The cadence plays within the next bar and rings for about 6 s. The ambience bed stays on quietly until the next `play()`.
 - `brush(x, y, speed)` is called every animation frame while the brush is down. `x` and `y` are 0..1 painting coordinates with y down. `speed` is painting-widths per second, usually 0..3. The engine owns rate limiting and quantising. `brushUp()` is called once when the brush lifts.
 - `wake(x)` means a thing in the view woke up because the player painted it. It plays a small flourish in key, panned by `x`.
 - `duck(on)` is true while a narration line is on screen. Music drops about 3 dB. Ambience does not.

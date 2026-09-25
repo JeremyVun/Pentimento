@@ -38,6 +38,10 @@ export class Narration {
     return this.current !== null || this.queue.length > 0;
   }
 
+  get onLast(): boolean {
+    return this.current !== null && this.queue.length === 0;
+  }
+
   /** Moves on from the line showing now. */
   skip(): void {
     const c = this.current;

@@ -68,6 +68,8 @@ export class Game {
   private introEnd = Infinity;
   private openingQueued = false;
   private musicStarted = false;
+  /** The score plays on under her notes and resolves as her closing line begins. */
+  private musicEnded = false;
   private focus: Spot | null = null;
   private focusAmt = 0;
   private attn: Spot | null = null;
@@ -242,6 +244,7 @@ export class Game {
     this.introEnd = Infinity;
     this.openingQueued = false;
     this.musicStarted = false;
+    this.musicEnded = false;
     for (const m of ch.moments ?? []) this.moments[m.id] = { state: 'waiting', set: false };
     this.bellRung = false;
     this.paintLeft = ch.paint ?? Infinity;
@@ -368,6 +371,10 @@ export class Game {
       }
 
       case 'reflect': {
+        if (!this.musicEnded && this.narration.onLast) {
+          this.musicEnded = true;
+          this.audio.endChapter();
+        }
         if (this.phaseT > 1 && !this.narration.busy) {
           if (this.chapterIndex + 1 < CHAPTERS.length) this.startChapter(this.chapterIndex + 1);
           else this.enterLift();
@@ -552,7 +559,6 @@ export class Game {
     this.brush.enabled = false;
     this.brush.release();
     this.audio.brushUp();
-    this.audio.endChapter();
     this.view.showFinish(false);
     this.view.hideHint();
   }
