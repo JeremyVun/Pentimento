@@ -4,18 +4,21 @@
   --light: #efe6d6;
   --dim: rgba(239, 230, 214, 0.62);
   --serif: 'EB Garamond', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --room: radial-gradient(ellipse at 50% 40%, #30271f 0%, #211a15 55%, #15100c 100%);
 }
 html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 40%, #30271f 0%, #211a15 55%, #15100c 100%);
+  overscroll-behavior: none;
+  background: var(--room);
   color: var(--light);
   font-family: var(--serif);
   -webkit-font-smoothing: antialiased;
   user-select: none;
   -webkit-user-select: none;
 }
+body, button { touch-action: manipulation; }
 .board {
   position: absolute;
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55), 0 3px 8px rgba(0, 0, 0, 0.45);
@@ -267,13 +270,19 @@ button {
 .fatal {
   position: fixed;
   inset: 0;
+  z-index: 10;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1.1em;
   padding: 2em;
   text-align: center;
   font-size: 20px;
+  line-height: 1.4;
+  background: var(--room);
 }
+.fatal p { margin: 0; max-width: 28em; }
 @media (prefers-reduced-motion: reduce) {
   .narration .line span { animation-duration: 0.01s; }
 }
