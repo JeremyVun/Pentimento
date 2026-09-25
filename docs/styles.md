@@ -44,7 +44,7 @@ Each year is painted in her hand at that age (`hand` in `src/scene/config.ts`, s
 
 - EB Garamond. Gran's narration is italic; the grandchild's is upright. The same goes for the year cards.
 - Narration is inked onto the board one line at a time, word by word, beside the thing it's about.
-- UI is quiet: buttons are small dabs of dark paint (a dry-brush mask drawn at load), bottom right; Begin is a larger pale stroke, like the clouds. Mute is a speaker icon. The title screen shows only the title and Begin. Every string follows the `user-facing-copy` skill.
+- UI is quiet: buttons are pale cream brushstrokes like the clouds (a dry-brush mask drawn at load) with dark text, bottom right; Begin is the larger one. Mute is a speaker icon. The title screen shows only the title and Begin. Every string follows the `user-facing-copy` skill.
 
 ## Sound
 

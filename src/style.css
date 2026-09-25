@@ -211,16 +211,16 @@ button {
   position: relative;
   isolation: isolate;
   font-size: 15px;
-  color: var(--light);
+  color: #3b322b;
   background: none;
   border: none;
   padding: 0.35em 1.2em 0.42em;
   transition: opacity 0.6s ease;
 }
-.quiet::before { background: rgba(33, 27, 22, 0.78); }
-.quiet:hover::before, .quiet:focus-visible::before { background: rgba(58, 47, 38, 0.92); }
+.quiet::before { background: rgba(245, 234, 211, 0.84); }
+.quiet:hover::before, .quiet:focus-visible::before { background: rgba(251, 244, 228, 0.95); }
 .quiet:focus-visible { outline: none; text-decoration: underline; text-underline-offset: 0.2em; }
-.quiet.icon { display: flex; align-items: center; padding: 0.3em 0.85em 0.36em; }
+.quiet.icon { display: flex; align-items: center; padding: 0.3em 0.85em 0.36em; font-size: clamp(12px, calc(var(--board-h) * 0.02), 15px); }
 .quiet.icon svg { width: 1.55em; height: 1.55em; display: block; }
 .quiet.icon:focus-visible::after {
   content: '';
