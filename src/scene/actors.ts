@@ -3,6 +3,21 @@ import { A, BRIDGE, FIG_BASE, WALL_Y, riverSpan } from './geometry';
 import { drawFerryBoat } from './draw';
 import { circle, clamp, ellipse, hash, lerp, mixHex, mulberry, poly, shade, smooth, withAlpha } from './util';
 
+/** Native roundRect where the browser has it; Safari 15, Firefox before 112 and Chrome before 99 get the same path from arcs. */
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  if (ctx.roundRect) {
+    ctx.roundRect(x, y, w, h, r);
+    return;
+  }
+  const k = Math.min(r, w / 2, h / 2);
+  ctx.moveTo(x + k, y);
+  ctx.arcTo(x + w, y, x + w, y + h, k);
+  ctx.arcTo(x + w, y + h, x, y + h, k);
+  ctx.arcTo(x, y + h, x, y, k);
+  ctx.arcTo(x, y, x + w, y, k);
+  ctx.closePath();
+}
+
 interface PersonStyle {
   coat: string;
   legs: string;
@@ -465,7 +480,7 @@ export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void
     const h = 0.036;
     ctx.fillStyle = '#3f7a6a';
     ctx.beginPath();
-    ctx.roundRect(x - w / 2, by - h, w, h, 0.006);
+    roundRect(ctx, x - w / 2, by - h, w, h, 0.006);
     ctx.fill();
     ctx.fillStyle = '#efe6cf';
     ctx.fillRect(x - w / 2, by - h + 0.004, w, 0.013);
@@ -669,7 +684,7 @@ function pram(ctx: CanvasRenderingContext2D, x: number, y: number, f: Frame): vo
   ctx.translate(x, y - 0.02);
   ctx.rotate(rock * 3);
   ctx.beginPath();
-  ctx.roundRect(-0.035, -0.022, 0.07, 0.03, 0.01);
+  roundRect(ctx, -0.035, -0.022, 0.07, 0.03, 0.01);
   ctx.fillStyle = '#2f4a6e';
   ctx.fill();
   ctx.beginPath();
@@ -920,7 +935,7 @@ export function drawWindow(ctx: CanvasRenderingContext2D, f: Frame): void {
     ctx.fillRect(x - 0.01, ty - 0.012, 0.004, 0.016);
   });
   ctx.beginPath();
-  ctx.roundRect(jx - 0.035, jy - 0.075, 0.07, 0.075, 0.012);
+  roundRect(ctx, jx - 0.035, jy - 0.075, 0.07, 0.075, 0.012);
   ctx.fillStyle = withAlpha('#cfe3dd', 0.75);
   ctx.fill();
   ctx.fillStyle = withAlpha('#9fc4bc', 0.6);

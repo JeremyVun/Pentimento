@@ -62,6 +62,7 @@ export class Game {
   private sketch = 0;
   private living = 1;
   private finishRequested = false;
+  private canFinish = false;
   private baked = false;
   private paintedSeconds = 0;
   /** Seconds since the brush was last down, and since the last moment passed. */
@@ -126,10 +127,17 @@ export class Game {
     view.onBoardPress = () => {
       if (this.phase === 'intro' || this.phase === 'reflect') this.narration.skip();
     };
+    view.onPress = () => void this.audio.unlock();
     view.onBegin = () => this.begin();
-    view.onFinish = () => { this.finishRequested = true; };
-    view.onAgain = () => this.again();
-    view.onSave = () => this.save();
+    view.onFinish = () => {
+      if (this.phase === 'painting' && this.canFinish) this.finishRequested = true;
+    };
+    view.onAgain = () => {
+      if (this.phase === 'lift') this.again();
+    };
+    view.onSave = () => {
+      this.save().catch((e) => console.error(e));
+    };
     this.enterTitle();
   }
 
@@ -202,6 +210,8 @@ export class Game {
   private again(): void {
     this.narration.clear();
     this.view.showEnd(false);
+    this.view.hideHint();
+    this.view.setLiftLabel(null);
     this.painter.clearLift();
     this.liftGrid.clear();
     this.audio.play('title');
@@ -248,6 +258,7 @@ export class Game {
     this.painter.clearMask();
     this.coverage.clear();
     this.finishRequested = false;
+    this.canFinish = false;
     this.baked = false;
     this.moments = {};
     this.idleT = 0;
@@ -359,9 +370,9 @@ export class Game {
         this.sinceGone += dt;
         if (this.sittingDone()) this.finishRequested = true;
         if (!this.catchHint && (this.paintedSeconds > 2.5 || this.coverage.total() > 0.06)) this.view.hideHint();
-        const canFinish = this.phaseT > 25
+        this.canFinish = this.phaseT > 25
           && Object.values(this.moments).every((m) => m.state === 'gone');
-        this.view.showFinish(canFinish);
+        this.view.showFinish(this.canFinish);
         if (this.phaseT >= this.cfg.duration || this.finishRequested || this.phaseT >= this.finishAt) this.enterDrying();
         break;
       }

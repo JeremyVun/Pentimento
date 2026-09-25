@@ -95,9 +95,9 @@ export function createAudioEngine(): AudioEngine {
     if (document.hidden) {
       if (brush) brush.up(ctx.currentTime);
       brushDown = false;
-      void ctx.suspend();
+      ctx.suspend().catch(() => {});
     } else {
-      void ctx.resume();
+      ctx.resume().catch(() => {});
     }
   }
 
@@ -110,22 +110,37 @@ export function createAudioEngine(): AudioEngine {
     },
 
     async unlock() {
-      if (!ctx) {
-        ctx = new AudioContext({ latencyHint: 'interactive' });
-        synth = new Synth(ctx);
-        brushOuts = synth.makeOuts(1).outs;
-        brush = new Brush(synth, target);
-        synth.setMuted(muted, ctx.currentTime);
-        if (ducked) synth.duck(true, ctx.currentTime);
-        document.addEventListener('visibilitychange', onVisibility);
-        setInterval(tick, TICK_MS);
-        engine.warm();
-      }
-      if (ctx.state !== 'running' && !document.hidden) await ctx.resume();
-      if (pending) {
-        const p = pending;
-        pending = null;
-        start(p.id, p.dur);
+      try {
+        if (!ctx) {
+          // iOS plays Web Audio through the ringer channel unless told this is playback, so the silent switch would mute it.
+          const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+          if (session) session.type = 'playback';
+          ctx = new AudioContext({ latencyHint: 'interactive' });
+          synth = new Synth(ctx);
+          brushOuts = synth.makeOuts(1).outs;
+          brush = new Brush(synth, target);
+          synth.setMuted(muted, ctx.currentTime);
+          if (ducked) synth.duck(true, ctx.currentTime);
+          document.addEventListener('visibilitychange', onVisibility);
+          let failed = false;
+          setInterval(() => {
+            try {
+              tick();
+            } catch (e) {
+              if (!failed) console.error(e);
+              failed = true;
+            }
+          }, TICK_MS);
+          engine.warm();
+        }
+        if (ctx.state !== 'running' && !document.hidden) await ctx.resume();
+        if (pending) {
+          const p = pending;
+          pending = null;
+          start(p.id, p.dur);
+        }
+      } catch (e) {
+        console.warn('Audio could not start', e);
       }
     },
 

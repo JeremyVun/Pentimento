@@ -40,6 +40,13 @@ function brushSwatch(): string {
   return `url(${c.toDataURL()})`;
 }
 
+/** Hidden controls only fade out, so they also leave the tab order and give up focus. */
+function hideControls(e: HTMLElement, hidden: boolean): void {
+  if (e.inert === hidden) return;
+  e.inert = hidden;
+  if (hidden && e.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+}
+
 const SPEAKER = '<path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/>';
 const WAVES = '<path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>';
 const CROSS = '<path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>';
@@ -68,6 +75,8 @@ export class View {
   onSave: (() => void) | null = null;
   onMute: ((muted: boolean) => void) | null = null;
   onBoardPress: (() => void) | null = null;
+  /** Any press or key, so audio that the browser paused can resume on a user gesture. */
+  onPress: (() => void) | null = null;
 
   constructor(root: HTMLElement) {
     document.documentElement.style.setProperty('--swatch', brushSwatch());
@@ -104,16 +113,20 @@ export class View {
     this.fullscreen.addEventListener('click', () => this.toggleFullscreen());
     document.addEventListener('fullscreenchange', () => this.showFullscreen());
 
+    this.finish.inert = true;
     this.end = el('div', 'end', root);
+    this.end.inert = true;
     const save = el('button', 'quiet', this.end, UI.save);
     save.addEventListener('click', () => this.onSave?.());
     const again = el('button', 'quiet', this.end, UI.again);
     again.addEventListener('click', () => this.onAgain?.());
 
     window.addEventListener('keydown', (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       if (e.key === 'm' || e.key === 'M') this.toggleMute();
       if (e.key === 'f' || e.key === 'F') this.toggleFullscreen();
     });
+    for (const type of ['pointerdown', 'pointerup', 'keydown']) window.addEventListener(type, () => this.onPress?.(), true);
     window.addEventListener('resize', () => this.layout());
     this.layout();
   }
@@ -177,6 +190,7 @@ export class View {
 
   showTitle(on: boolean): void {
     this.title.classList.toggle('on', on);
+    hideControls(this.title, !on);
     this.notes.classList.toggle('on', on);
   }
 
@@ -202,22 +216,25 @@ export class View {
 
   showFinish(on: boolean): void {
     this.finish.classList.toggle('on', on);
+    hideControls(this.finish, !on);
   }
 
   showEnd(on: boolean): void {
     this.end.classList.toggle('on', on);
+    hideControls(this.end, !on);
   }
 
   setCursor(visible: boolean, u: number, v: number, radius: number, down: boolean): void {
     const c = this.cursor;
     c.classList.toggle('on', visible);
     c.classList.toggle('down', down);
+    const cursor = visible ? 'none' : '';
+    if (this.board.style.cursor !== cursor) this.board.style.cursor = cursor;
     if (!visible) return;
     const d = radius * 2 * this.rect.h;
     c.style.width = `${d}px`;
     c.style.height = `${d}px`;
     c.style.transform = `translate(${this.rect.x + u * this.rect.w - d / 2}px, ${this.rect.y + v * this.rect.h - d / 2}px)`;
-    this.board.style.cursor = 'none';
   }
 
   setLiftLabel(text: string | null, u = 0, v = 0): void {
@@ -231,8 +248,16 @@ export class View {
     l.style.transform = `translate(${this.rect.x + u * this.rect.w + 26}px, ${this.rect.y + v * this.rect.h - 34}px)`;
   }
 
-  fatal(message: string): void {
-    const m = el('div', 'fatal', document.body, message);
+  /** Covers the game with a message, once. `reload` adds a button to reload the page. */
+  fatal(message: string, reload = false): void {
+    if (document.querySelector('.fatal')) return;
+    for (const c of document.body.children) (c as HTMLElement).inert = true;
+    const m = el('div', 'fatal', document.body);
     m.setAttribute('role', 'alert');
+    el('p', '', m, message);
+    if (!reload) return;
+    const b = el('button', 'quiet', m, UI.reload);
+    b.addEventListener('click', () => location.reload());
+    b.focus();
   }
 }

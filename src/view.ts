@@ -6,7 +6,9 @@ import { drawFlow } from './scene/flow';
 
 /** QA viewer: ?view=<scene>&t=<seconds>&mask=full|none|half&sketch=1&freeze=1 */
 export function runViewer(params: URLSearchParams): void {
-  const id = params.get('view') || 'nine';
+  const asked = params.get('view') || 'nine';
+  const id = Object.prototype.hasOwnProperty.call(SCENES, asked) ? asked : 'nine';
+  if (id !== asked) console.warn(`No scene called "${asked}", showing "nine". Scenes: ${Object.keys(SCENES).join(', ')}`);
   const cfg = SCENES[id];
   const board = document.createElement('canvas');
   board.className = 'board';
