@@ -457,6 +457,8 @@ void main() {
   float wet = c.g;
   if (best > c.r + 0.003 || fresh > c.a + 0.003) wet = 1.0;
   float painted = max(c.b, step(0.0005, best));
+  // Paint arriving anywhere is wet, however little arrives, or thin edges would keep showing what was there before.
+  if (painted > c.b) wet = 1.0;
   outColor = vec4(max(best, 0.0), wet, painted, max(fresh, 0.0));
 }
 `;

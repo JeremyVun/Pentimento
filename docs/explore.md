@@ -109,6 +109,10 @@ Spots along a drag now sit about a pool's width apart so their paint doesn't pil
 
 Doubled the band's speed (`TRAIL_REACH_PER_SEC` 0.2), let it widen further (`TRAIL_MAX` 0.25) and start thicker (`TRAIL_START` 0.04). A 0.9-second scribble across the sky now leaves about 13% of the board. Holding still is unchanged.
 
+> good enough. now, see attached screenshot - there is pixellation / artifacting on the edges. do you see it?
+
+White dots along the river bank and white outlines round thin things (the jetty, the tree trunk). Paint only shows its colour once it has been wet, and paint reaching a spot in a tiny amount, as on thin edges, could count as painted without ever getting wet. It then kept showing the paper underneath. Paint arriving anywhere for the first time now always makes it wet (`POUR_SPREAD_FS`).
+
 ## Polish after the merge (2026-09-25)
 
 - Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.
