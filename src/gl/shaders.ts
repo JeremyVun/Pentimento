@@ -294,7 +294,7 @@ void main() {
 }
 `;
 
-// Poured paint. R = paint left to spread (above zero means painted), G = wetness.
+// Poured paint. R = paint left to spread, G = wetness, B = painted this sitting.
 // A pour seed only wets the region most of the brush is over, so clicks near an edge or on a
 // stray edge pixel still fill the shape the player meant.
 export const POUR_SEED_VS = `${HEADER}
@@ -342,10 +342,11 @@ in float vStrength;
 in float vSeed;
 flat in float vRegion;
 uniform sampler2D uRegion;
+uniform float uAnyRegion;
 out vec4 outColor;
 float rid(ivec2 p) { return floor(texelFetch(uRegion, p, 0).r * 255.0 / 16.0 + 0.5); }
 void main() {
-  if (rid(ivec2(gl_FragCoord.xy)) != vRegion) discard;
+  if (uAnyRegion < 0.5 && rid(ivec2(gl_FragCoord.xy)) != vRegion) discard;
   float r = length(vLocal);
   float n = vnoise(vLocal * 2.5 + vSeed);
   float shape = 1.0 - smoothstep(0.55, 1.0, r + (n - 0.5) * 0.4);
@@ -384,8 +385,9 @@ void main() {
     best = max(best, cand);
   }
   float wet = c.g;
-  if (c.r <= 0.0005 && best > 0.0005) wet = 1.0;
-  outColor = vec4(max(best, 0.0), wet, 0.0, 1.0);
+  if (best > c.r + 0.003) wet = 1.0;
+  float painted = max(c.b, step(0.0005, best));
+  outColor = vec4(max(best, 0.0), wet, painted, 1.0);
 }
 `;
 
@@ -394,7 +396,28 @@ in vec2 vUV;
 uniform sampler2D uPour;
 out vec4 outColor;
 void main() {
-  outColor = vec4(smoothstep(0.0, 0.01, texture(uPour, vUV).r), 0.0, 0.0, 1.0);
+  vec4 p = texture(uPour, vUV);
+  float painted = max(smoothstep(0.0, 0.01, p.r), p.b);
+  outColor = vec4(painted, clamp(p.g, 0.0, 1.0) * painted, 0.0, 1.0);
+}
+`;
+
+// The current sitting's picture. Wet paint follows the living view; as it dries it keeps the moment it dried in.
+export const HOLD_FS = `${HEADER}${NOISE}
+in vec2 vUV;
+uniform sampler2D uHeld;
+uniform sampler2D uLiving;
+uniform sampler2D uPour;
+uniform float uFollow;
+uniform float uAspect;
+out vec4 outColor;
+void main() {
+  vec4 p = texture(uPour, vUV);
+  float wet = p.g * max(step(0.0005, p.r), p.b);
+  float n = fbm(vUV * vec2(uAspect, 1.0) * 7.0);
+  float setsAt = 0.05 + 0.32 * n;
+  float follow = max(uFollow, step(setsAt, wet));
+  outColor = vec4(mix(texture(uHeld, vUV).rgb, texture(uLiving, vUV).rgb, follow), 1.0);
 }
 `;
 
@@ -424,32 +447,45 @@ uniform vec3 uPaperCol;
 uniform float uDryFade;
 uniform vec4 uPulse;
 uniform float uPulseAmt;
+uniform sampler2D uFigures;
+uniform float uFigAmt;
 out vec4 outColor;
 
-float sketchEdge(vec2 uv) {
-  vec2 e = 1.0 / vec2(textureSize(uSketch, 0));
-  vec3 tl = texture(uSketch, uv + vec2(-e.x, -e.y)).rgb;
-  vec3  t = texture(uSketch, uv + vec2(0.0, -e.y)).rgb;
-  vec3 tr = texture(uSketch, uv + vec2(e.x, -e.y)).rgb;
-  vec3  l = texture(uSketch, uv + vec2(-e.x, 0.0)).rgb;
-  vec3  r = texture(uSketch, uv + vec2(e.x, 0.0)).rgb;
-  vec3 bl = texture(uSketch, uv + vec2(-e.x, e.y)).rgb;
-  vec3  b = texture(uSketch, uv + vec2(0.0, e.y)).rgb;
-  vec3 br = texture(uSketch, uv + vec2(e.x, e.y)).rgb;
+float edgeOf(sampler2D s, vec2 uv) {
+  vec2 e = 1.0 / vec2(textureSize(s, 0));
+  vec3 tl = texture(s, uv + vec2(-e.x, -e.y)).rgb;
+  vec3  t = texture(s, uv + vec2(0.0, -e.y)).rgb;
+  vec3 tr = texture(s, uv + vec2(e.x, -e.y)).rgb;
+  vec3  l = texture(s, uv + vec2(-e.x, 0.0)).rgb;
+  vec3  r = texture(s, uv + vec2(e.x, 0.0)).rgb;
+  vec3 bl = texture(s, uv + vec2(-e.x, e.y)).rgb;
+  vec3  b = texture(s, uv + vec2(0.0, e.y)).rgb;
+  vec3 br = texture(s, uv + vec2(e.x, e.y)).rgb;
   vec3 gx = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
   vec3 gy = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
   return length(gx) + length(gy);
+}
+
+float sketchEdge(vec2 uv) { return edgeOf(uSketch, uv); }
+
+vec3 graphiteOver(vec3 c) {
+  return mix(c * 0.58 + vec3(0.03, 0.03, 0.035), c + vec3(0.18), smoothstep(0.42, 0.2, lum(c)));
+}
+
+float poured(vec2 uv) {
+  vec4 p = texture(uPour, uv);
+  return max(smoothstep(0.0, 0.03, p.r), p.b);
 }
 
 float pourCoverage(vec2 uv) {
   vec2 t = 1.0 / vec2(textureSize(uPour, 0));
   vec2 j = vec2(vnoise(uv * uRes * 0.07), vnoise(uv * uRes * 0.07 + 13.0)) - 0.5;
   float s = 0.0;
-  s += smoothstep(0.0, 0.03, texture(uPour, uv + j * t * 1.5).r) * 2.0;
-  s += smoothstep(0.0, 0.03, texture(uPour, uv + vec2(1.2, 0.7) * t).r);
-  s += smoothstep(0.0, 0.03, texture(uPour, uv + vec2(-0.7, 1.2) * t).r);
-  s += smoothstep(0.0, 0.03, texture(uPour, uv + vec2(-1.2, -0.7) * t).r);
-  s += smoothstep(0.0, 0.03, texture(uPour, uv + vec2(0.7, -1.2) * t).r);
+  s += poured(uv + j * t * 1.5) * 2.0;
+  s += poured(uv + vec2(1.2, 0.7) * t);
+  s += poured(uv + vec2(-0.7, 1.2) * t);
+  s += poured(uv + vec2(-1.2, -0.7) * t);
+  s += poured(uv + vec2(0.7, -1.2) * t);
   return s / 6.0;
 }
 
@@ -506,11 +542,12 @@ void main() {
   }
 
   vec3 col = dry;
+  float alive = 0.0;
   if (uLiftMode < 0.5 && uLivingAmt > 0.0) {
     vec4 m = texture(uMask, uv);
     vec4 pr = texture(uPour, uv);
     m.r = max(m.r, pourCoverage(uv) * 1.1);
-    m.g = max(m.g, pr.g * smoothstep(0.0, 0.01, pr.r));
+    m.g = max(m.g, pr.g * max(smoothstep(0.0, 0.01, pr.r), pr.b));
     float streak = vnoise(uv * vec2(uAspect, 1.0) * vec2(120.0, 9.0));
     float cov = m.r * uLivingAmt;
     float mEff = smoothstep(0.16, 0.6, cov + (tooth - 0.5) * 0.32 + (streak - 0.5) * 0.12);
@@ -519,6 +556,19 @@ void main() {
     liv *= 1.0 - ridge * 0.08;
     if (uBake < 0.5) liv = wetLook(liv, clamp(m.g, 0.0, 1.0), uv, tooth);
     col = mix(dry, liv, mEff);
+    alive = mEff * smoothstep(0.04, 0.2, m.g);
+  }
+
+  if (uFigAmt > 0.001 && uBake < 0.5 && uLiftMode < 0.5) {
+    vec2 j = vec2(snoise(uv * 40.0 + 3.0), snoise(uv * 40.0 + 11.0)) * 0.0008;
+    float line = smoothstep(0.3, 0.85, edgeOf(uFigures, uv + j));
+    line *= 0.6 + 0.4 * tooth;
+    float away = (1.0 - alive) * uFigAmt;
+    col = mix(col, graphiteOver(col), clamp(line * away, 0.0, 1.0) * 0.75);
+    vec3 fc = texture(uFigures, uv).rgb;
+    vec3 fh = rgb2hsv(fc);
+    float warm = smoothstep(0.55, 0.75, fh.y) * smoothstep(0.2, 0.12, abs(fh.x - 0.13));
+    col = mix(col, fc * 0.95, warm * away * 0.8);
   }
 
   if (uBake > 0.5) { outColor = vec4(col, 1.0); return; }

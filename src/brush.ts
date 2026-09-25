@@ -8,15 +8,25 @@ const GH = 100;
 export class Coverage {
   readonly grid = new Float32Array(GW * GH);
   private poured = new Float32Array(GW * GH);
+  private wet = new Float32Array(GW * GH);
 
   clear(): void {
     this.grid.fill(0);
     this.poured.fill(0);
+    this.wet.fill(0);
   }
 
   /** Takes the GPU's coarse map of poured paint (RGBA bytes, GW x GH, rows from the top). */
   setPoured(bytes: Uint8Array): void {
-    for (let i = 0; i < GW * GH; i++) this.poured[i] = bytes[i * 4] / 255;
+    for (let i = 0; i < GW * GH; i++) {
+      this.poured[i] = bytes[i * 4] / 255;
+      this.wet[i] = bytes[i * 4 + 1] / 255;
+    }
+  }
+
+  /** Mean wetness of the paint inside an ellipse in scene units. */
+  wetness(cx: number, cy: number, rx: number, ry: number): number {
+    return this.mean(cx, cy, rx, ry, (i) => this.wet[i]);
   }
 
   private at(i: number): number {
@@ -44,6 +54,10 @@ export class Coverage {
 
   /** Mean coverage inside an ellipse given in scene units (x 0..ASPECT, y 0..1). */
   ellipse(cx: number, cy: number, rx: number, ry: number): number {
+    return this.mean(cx, cy, rx, ry, (i) => this.at(i));
+  }
+
+  private mean(cx: number, cy: number, rx: number, ry: number, value: (i: number) => number): number {
     let sum = 0;
     let n = 0;
     const x0 = Math.max(0, Math.floor(((cx - rx) / ASPECT) * GW));
@@ -55,7 +69,7 @@ export class Coverage {
         const dx = (((gx + 0.5) / GW) * ASPECT - cx) / rx;
         const dy = ((gy + 0.5) / GH - cy) / ry;
         if (dx * dx + dy * dy > 1) continue;
-        sum += this.at(gy * GW + gx);
+        sum += value(gy * GW + gx);
         n++;
       }
     }

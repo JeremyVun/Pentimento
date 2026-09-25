@@ -10,6 +10,15 @@ export interface Subject {
   line: string;
 }
 
+/** Joe crossing the bridge at eight: the lines for catching him in paint, or missing him. */
+export interface JoeMoment {
+  appears: string;
+  caught: string;
+  after: string;
+  missed: string;
+  closeMissed: string;
+}
+
 export interface Chapter {
   id: Exclude<ScoreId, 'title' | 'lift'>;
   card: string;
@@ -20,6 +29,7 @@ export interface Chapter {
   closeLow: string;
   closeFull?: string;
   brush?: number;
+  joe?: JoeMoment;
 }
 
 export const TITLE = 'Pentimento';
@@ -66,11 +76,15 @@ export const CHAPTERS: Chapter[] = [
     voice: 'gran',
     lines: [
       { at: 3, text: 'The bridge opened the spring I turned twenty-three. The ferry stopped the same week.' },
-      { at: 17, text: 'A man in a yellow coat crossed the bridge every morning at eight. I put him in the painting before I knew his name.' },
-      { at: 38, text: 'His name was Joe. He worked at the post office, and he was never late.' },
     ],
+    joe: {
+      appears: 'Every morning at eight, a man in a yellow coat crossed the bridge.',
+      caught: 'The first time he waved at me, I dropped my brush out of the window.',
+      after: 'His name was Joe. He worked at the post office, and he was never late.',
+      missed: "He was across the bridge before I could paint him. I didn't know his name yet.",
+      closeMissed: 'I did get him into a painting in the end. His name was Joe, and we married the next summer.',
+    },
     subjects: [
-      { id: 'joe', x: 0.74, y: 0.53, rx: 0.38, ry: 0.035, line: 'The first time he waved at me, I dropped my brush out of the window.' },
       { id: 'ferry', x: 0.405, y: 0.7, rx: 0.07, ry: 0.03, line: 'They dragged the ferry up onto the bank and left it there. Nettles grew through it for years.' },
       { id: 'cherry', x: 1.3, y: 0.62, rx: 0.2, ry: 0.05, line: 'The cherry trees on the far bank flowered that week. The petals floated down the river for days.' },
     ],

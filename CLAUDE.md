@@ -2,7 +2,8 @@
 
 A gouache narrative painting game (Vite + TypeScript, WebGL2, Web Audio, no art or audio files).
 
-Read `docs/project.md` first: it holds Jeremy's brief verbatim, the vision and the chapter plan. Look and sound: `docs/styles.md`. Audio interface: `docs/contracts/audio.md`.
+Read `docs/project.md` first: it holds Jeremy's brief verbatim, the vision and the chapter plan.
+On the `explore-pacing` branch, also read `docs/explore.md`: Jeremy's feedback on pacing and interaction, verbatim, and the prototypes being tried. Look and sound: `docs/styles.md`. Audio interface: `docs/contracts/audio.md`.
 
 Commands: `npm run dev` (127.0.0.1:5317), `npm run typecheck`, `npm run build`, `npm run preview` (5318). QA: `?speed=8` runs the game fast; `?view=<scene>` shows one scene fully painted. Capture tools are indexed in `tools/README.md`; keep captures in `/tmp`.
 

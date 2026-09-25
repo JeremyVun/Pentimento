@@ -3,7 +3,6 @@ import { MAJOR } from '../theory';
 import { bars, hold, lines, roll, tailPad } from './common';
 
 const key = { tonic: 77, scale: MAJOR };
-const BELL = 62;
 /** The rain eases around here, and the birds come out after it. */
 const RAIN_EASES = 38;
 
@@ -21,7 +20,6 @@ const intro: Section = {
       w.pad('pad', bar, s, { lo: 57, hi: 74, count: 4, vel: 0.45, attack: 2 });
       w.arp('piano', bar, s, 'B . 1 . 2 . 3 .', lh(0.3));
     });
-    w.bell(BELL, b, 1, 3, 0.8);
   },
 };
 

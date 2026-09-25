@@ -17,7 +17,7 @@ const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=m
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 page.on('console', (m) => { if (m.type() === 'error') console.log('console:', m.text().slice(0, 300)); });
 page.on('pageerror', (e) => console.log('pageerror:', e.message));
-await page.goto(`http://127.0.0.1:5317/?speed=${speed}`);
+await page.goto(`${process.env.BASE || 'http://127.0.0.1:5317/'}?speed=${speed}`);
 await page.waitForFunction(() => (window.__frames || 0) > 10);
 const state = () => page.evaluate(() => window.__game.debug);
 const shot = async (name) => { await page.screenshot({ path: `${outdir}/${name}.png` }); console.log('shot', name, JSON.stringify(await state())); };

@@ -48,7 +48,7 @@ export function runViewer(params: URLSearchParams): void {
     const t = freeze ? t0 : t0 + (performance.now() - start) / 1000;
     drawScene(sctx, sc.height, { cfg, t, sketch: false, woke: Object.fromEntries(Object.entries(woke).map(([k, v]) => [k, v + t - t0])) });
     painter.uploadScene(sc, !!cfg.blur);
-    painter.renderLiving({ time: t, warp: 1, blur: cfg.blur ?? 0, strokeScale: cfg.blur ? 1.6 : 1, angle: 0, layers: DEFAULT_LAYERS });
+    painter.renderLiving({ time: t, warp: 1, blur: cfg.blur ?? 0, strokeScale: cfg.blur ? 1.6 : 1, angle: 0, follow: 1, layers: DEFAULT_LAYERS });
     painter.present({ time: t, sketch, wash: 0, living: mask === 'none' ? 0 : 1, dryFade: 0, liftMode: false, layers: 1 });
     (window as unknown as { __frames: number }).__frames = ((window as unknown as { __frames: number }).__frames || 0) + 1;
     requestAnimationFrame(frame);

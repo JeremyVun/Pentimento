@@ -3,6 +3,7 @@ import { Brush, Coverage } from './brush';
 import { ASPECT, DEFAULT_LAYERS, Painter, type Dab } from './gl/painter';
 import { Narration } from './narration';
 import { SCENES, type SceneConfig } from './scene/config';
+import { drawFigures, joeOnBridge } from './scene/actors';
 import { drawScene } from './scene/draw';
 import { drawFlow } from './scene/flow';
 import { drawRegions } from './scene/regions';
@@ -14,6 +15,9 @@ type Phase = 'title' | 'opening' | 'intro' | 'painting' | 'drying' | 'lift';
 const BRUSH_RADIUS = 0.034;
 const WAKE_AT = 0.42;
 const INTRO = 5.2;
+/** How fast poured paint dries while painting. Wet paint moves with the view; dry paint keeps its moment. */
+const DRY_RATE = 0.06;
+const JOE_SETS_AFTER = 3.5;
 
 const ease = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const ramp = (t: number, a: number, b: number) => ease((t - a) / (b - a));
@@ -48,6 +52,10 @@ export class Game {
   private pulse: { x: number; y: number; rx: number; ry: number; t: number } | null = null;
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private sceneScale = 0.62;
+  private figuresCanvas: HTMLCanvasElement;
+  private joe: 'waiting' | 'crossing' | 'caught' | 'gone' = 'waiting';
+  private joeCaught = false;
+  private joeSet = false;
 
   constructor(
     private painter: Painter,
@@ -66,6 +74,9 @@ export class Game {
     this.sketchCanvas = document.createElement('canvas');
     this.sketchCanvas.width = painter.w;
     this.sketchCanvas.height = painter.h;
+    this.figuresCanvas = document.createElement('canvas');
+    this.figuresCanvas.width = this.sceneCanvas.width;
+    this.figuresCanvas.height = this.sceneCanvas.height;
 
     this.regionCanvas = document.createElement('canvas');
     this.regionCanvas.width = Math.round(painter.w / 2);
@@ -81,7 +92,12 @@ export class Game {
   }
 
   get debug() {
-    return { phase: this.phase, chapter: this.chapter?.id ?? null, t: this.phaseT, coverage: this.coverage.total() };
+    const woke = this.wakeTimes.joe === undefined ? undefined : this.sceneT - this.wakeTimes.joe;
+    const joe = joeOnBridge(this.cfg, this.sceneT, woke);
+    return {
+      phase: this.phase, chapter: this.chapter?.id ?? null, t: this.phaseT, sceneT: this.sceneT, coverage: this.coverage.total(),
+      joe: this.joe, joePos: joe ? { u: joe.x / ASPECT, v: joe.y - 0.028 } : null,
+    };
   }
 
   /** QA only: jump straight to the lift ending with whatever is on the board. */
@@ -91,6 +107,24 @@ export class Game {
     this.chapter = CHAPTERS[this.chapterIndex];
     this.view.showTitle(false);
     this.enterLift();
+  }
+
+  /** QA only: paints every earlier year in full, then starts chapter `id`. */
+  qaFrom(id: string): void {
+    const i = CHAPTERS.findIndex((c) => c.id === id);
+    if (i < 0) return;
+    void this.audio.unlock();
+    this.view.showTitle(false);
+    this.painter.resetBoard();
+    for (let j = 0; j < i; j++) {
+      this.setScene(SCENES[CHAPTERS[j].id]);
+      this.painter.fillMask();
+      drawScene(this.sceneCtx, this.sceneCanvas.height, { cfg: this.cfg, t: 20, sketch: false, woke: {} });
+      this.painter.uploadScene(this.sceneCanvas, !!this.cfg.blur);
+      this.painter.renderLiving({ time: 20, warp: 1, blur: this.cfg.blur ?? 0, strokeScale: this.cfg.blur ? 1.7 : 1, angle: 0, follow: 1, layers: DEFAULT_LAYERS });
+      this.painter.bake(j);
+    }
+    this.startChapter(i);
   }
 
   private enterTitle(): void {
@@ -111,6 +145,11 @@ export class Game {
 
   private begin(): void {
     if (this.phase !== 'title') return;
+    const from = new URLSearchParams(location.search).get('from');
+    if (from) {
+      this.qaFrom(from);
+      return;
+    }
     void this.audio.unlock();
     this.audio.play('title');
     this.view.showTitle(false);
@@ -152,7 +191,7 @@ export class Game {
     drawFlow(this.flowCanvas.getContext('2d')!, this.flowCanvas.height, cfg);
     this.painter.uploadFlow(this.flowCanvas);
     const sctx = this.sketchCanvas.getContext('2d')!;
-    drawScene(sctx, this.sketchCanvas.height, { cfg, t: 0, sketch: true, woke: {} });
+    drawScene(sctx, this.sketchCanvas.height, { cfg: { ...cfg, figures: [] }, t: 0, sketch: true, woke: {} });
     this.painter.uploadSketch(this.sketchCanvas);
     const rctx = this.regionCanvas.getContext('2d')!;
     drawRegions(rctx, this.regionCanvas.height, cfg);
@@ -170,6 +209,9 @@ export class Game {
     this.finishRequested = false;
     this.baked = false;
     this.closeQueued = false;
+    this.joe = 'waiting';
+    this.joeCaught = false;
+    this.joeSet = false;
     this.brush.scale = ch.brush ?? 1;
     this.living = 1;
     this.sketch = 0;
@@ -230,7 +272,7 @@ export class Game {
         const ch = this.chapter!;
         this.sceneT += dt;
         this.applyPour(dabs, dt);
-        this.painter.dryMask(dt, 0.5);
+        this.painter.dryMask(dt, DRY_RATE);
         ch.lines.forEach((l, i) => {
           if (!this.shownLines.has(i) && this.phaseT >= l.at) {
             this.shownLines.add(i);
@@ -255,9 +297,11 @@ export class Game {
             }
           }
         }
+        this.updateJoe(ch, dt);
         if (this.brush.down) this.paintedSeconds += dt;
         if (this.paintedSeconds > 2.5 || this.coverage.total() > 0.06) this.view.hideHint();
-        const canFinish = this.phaseT > 25 && this.shownLines.size === ch.lines.length;
+        const canFinish = this.phaseT > 25 && this.shownLines.size === ch.lines.length
+          && (!ch.joe || this.joe === 'gone');
         this.view.showFinish(canFinish);
         if (this.phaseT >= this.cfg.duration || this.finishRequested) this.enterDrying();
         break;
@@ -300,8 +344,61 @@ export class Game {
     );
   }
 
+  /** A figure stands in front of several shapes, so paint poured on Joe covers him whatever is behind. */
+  private pourOnJoe(): void {
+    if (this.joe !== 'crossing' && this.joe !== 'caught') return;
+    const woke = this.wakeTimes.joe === undefined ? undefined : this.sceneT - this.wakeTimes.joe;
+    const pos = joeOnBridge(this.cfg, this.sceneT, woke);
+    if (!pos) return;
+    const cx = pos.x;
+    const cy = pos.y - 0.028;
+    if (Math.hypot(this.brush.x * ASPECT - cx, this.brush.y - cy) > 0.06) return;
+    this.painter.pourSeed([{ x: cx / ASPECT, y: cy, r: 0.034, strength: 0.02, angle: 0, seed: this.sceneT }], true);
+  }
+
+  /** Joe crosses once at eight. Paint that is still wet where he walks catches him, and he waves. */
+  private updateJoe(ch: Chapter, dt: number): void {
+    const at = this.cfg.joeAt;
+    if (!ch.joe || at === undefined) return;
+    if (this.joe === 'waiting') {
+      if (this.sceneT >= at - 0.6 && this.sceneT - dt < at - 0.6) this.audio.bell();
+      if (this.sceneT >= at) {
+        this.joe = 'crossing';
+        this.narration.push(ch.joe.appears, ch.voice);
+      }
+      return;
+    }
+    const woke = this.wakeTimes.joe === undefined ? undefined : this.sceneT - this.wakeTimes.joe;
+    const pos = joeOnBridge(this.cfg, this.sceneT, woke);
+    if (this.joe === 'crossing') {
+      if (!pos) {
+        this.joe = 'gone';
+        this.narration.push(ch.joe.missed, ch.voice);
+      } else if (this.coverage.wetness(pos.x, pos.y - 0.028, 0.025, 0.03) > 0.3) {
+        this.joe = 'caught';
+        this.joeCaught = true;
+        this.wakeTimes.joe = this.sceneT;
+        this.pulse = { x: pos.x, y: pos.y - 0.03, rx: 0.08, ry: 0.07, t: 0 };
+        this.narration.push(ch.joe.caught, ch.voice);
+        this.audio.wake(pos.x / ASPECT);
+      }
+      return;
+    }
+    if (this.joe === 'caught') {
+      if (!this.joeSet && woke !== undefined && woke >= JOE_SETS_AFTER && pos) {
+        this.joeSet = true;
+        this.painter.setPaint(pos.x, pos.y - 0.03, 0.04, 0.045);
+      }
+      if (!pos) {
+        this.joe = 'gone';
+        this.narration.push(ch.joe.after, ch.voice);
+      }
+    }
+  }
+
   private closeLine(): string {
     const ch = this.chapter!;
+    if (ch.joe && !this.joeCaught && this.coverage.total() >= 0.15) return ch.joe.closeMissed;
     const total = this.coverage.total();
     if (total < 0.15) return ch.closeLow;
     if (ch.closeFull && this.coverage.region(0, 0.45) > 0.8) return ch.closeFull;
@@ -345,6 +442,7 @@ export class Game {
       const seeds = dabs.filter((_, i) => i % 3 === 0).map((d) => ({ ...d, r: 0.016, strength: budget }));
       if (seeds.length === 0) seeds.push({ x: this.brush.x, y: this.brush.y, r: 0.016, strength: budget, angle: 0, seed: 1 });
       this.painter.pourSeed(seeds);
+      this.pourOnJoe();
       this.audio.brush(this.brush.x, this.brush.y, Math.max(this.brush.speed, 0.5));
     } else {
       this.pourHeld = 0;
@@ -389,6 +487,7 @@ export class Game {
       layers: CHAPTERS.length,
       pulse: this.pulse ? [this.pulse.x, this.pulse.y, this.pulse.rx, this.pulse.ry] as [number, number, number, number] : undefined,
       pulseAmt: this.pulse ? Math.sin(Math.min(1, this.pulse.t / 3.5) * Math.PI) ** 1.5 : 0,
+      figures: this.phase === 'painting' || this.phase === 'intro' || (this.phase === 'drying' && !this.baked) ? this.sketch : 0,
     };
   }
 
@@ -415,12 +514,17 @@ export class Game {
       drawScene(this.sceneCtx, this.sceneCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke });
       this.painter.uploadScene(this.sceneCanvas, !!this.cfg.blur);
       const slow = this.reducedMotion ? 0.4 : 1;
+      if (this.phase !== 'title' && this.phase !== 'opening') {
+        drawFigures(this.figuresCanvas.getContext('2d')!, this.figuresCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke });
+        this.painter.uploadFigures(this.figuresCanvas);
+      }
       this.painter.renderLiving({
         time: this.sceneT * slow,
         warp: this.reducedMotion ? 0.3 : 1,
         blur: this.cfg.blur ?? 0,
         strokeScale: this.cfg.blur ? 1.7 : 1,
         angle: 0,
+        follow: this.phase === 'title' || this.phase === 'opening' ? 1 : 0,
         layers: this.quality < 1 ? DEFAULT_LAYERS.map((l) => ({ ...l, count: l.count * this.quality })) : DEFAULT_LAYERS,
       });
     }

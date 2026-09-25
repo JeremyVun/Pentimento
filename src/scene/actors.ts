@@ -165,19 +165,44 @@ function head(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, s:
 
 const JOE: PersonStyle = { coat: '#f0bf2e', legs: '#3b3f52', hair: '#3a2c26', skin: '#e3b596' };
 
+const JOE_STOPS = 7;
+
+/** Where Joe is on the bridge, if he is on it. He crosses once, at eight, and stops to wave if he's painted. */
+export function joeOnBridge(c: Frame['cfg'], t: number, woke: number | undefined): { x: number; y: number; walkT: number; waving: boolean } | null {
+  if (!c.figures.includes('joeBridge')) return null;
+  const at = c.joeAt ?? 0;
+  const walk = c.joeAt === undefined ? c.duration * 0.95 : 20;
+  const walkT = t - at - (woke === undefined ? 0 : Math.min(woke, JOE_STOPS));
+  if (walkT < 0 || walkT > walk) return null;
+  return { x: lerp(0.37, 1.12, walkT / walk), y: BRIDGE.top, walkT, waving: woke !== undefined && woke < JOE_STOPS };
+}
+
+/** The people, boats and birds that move, alone on white paper, for the pencil layer. */
+export function drawFigures(ctx: CanvasRenderingContext2D, H: number, f: Frame): void {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.setTransform(H, 0, 0, H, 0, 0);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  drawBridgeFigures(ctx, f);
+  drawRiverFigures(ctx, f);
+  drawGardenFigures(ctx, f);
+  drawBirds(ctx, f);
+  ctx.restore();
+}
+
 export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void {
   const c = f.cfg;
   const y = BRIDGE.top + 0.002;
-  if (c.figures.includes('joeBridge')) {
+  const joe = joeOnBridge(c, f.t, f.woke.joe);
+  if (joe) {
     const w = f.woke.joe;
-    const stopFor = 7;
-    const walkT = w === undefined ? f.t : f.t - Math.min(w, stopFor);
-    const x = lerp(0.37, 1.1, clamp(walkT / (c.duration * 0.95)));
-    const waving = w !== undefined && w < stopFor;
-    const umbrellaUp = c.weather === 'rain' && f.t < c.duration * 0.55;
-    person(ctx, x, y, 0.054, JOE, {
-      walk: waving ? undefined : walkT * 6,
-      wave: waving ? w * 8 : 0,
+    const umbrellaUp = c.weather === 'rain' && f.t < c.duration * 0.4;
+    person(ctx, joe.x, y, 0.054, JOE, {
+      walk: joe.waving ? undefined : joe.walkT * 6,
+      wave: joe.waving ? (w ?? 0) * 8 : 0,
       umbrella: umbrellaUp ? '#2c2b31' : undefined,
     });
   }

@@ -53,6 +53,8 @@ export interface SceneConfig {
   wind: number;
   lightning?: boolean;
   duration: number;
+  /** Scene second the bell strikes eight and Joe starts across the bridge. */
+  joeAt?: number;
 }
 
 const base: Palette = {
@@ -154,7 +156,7 @@ export const SCENES: Record<string, SceneConfig> = {
     clouds: { kind: 'rain', n: 7, y0: 0.05, y1: 0.3, speed: 0.007, scale: 1.1 },
     town: 0.4, bridge: 'built', lamps: 'off', ferry: 'moored',
     fig: { size: 0.36, leaves: 'spring' },
-    figures: ['joeBridge'], weather: 'rain', cherry: true, wind: 0.3, duration: 85,
+    figures: ['joeBridge'], weather: 'rain', cherry: true, wind: 0.3, duration: 85, joeAt: 34,
   },
 
   thirtyone: {

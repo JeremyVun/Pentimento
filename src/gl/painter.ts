@@ -1,6 +1,6 @@
 import { GL, Program, Target, bindTarget, clearTarget, createTarget } from './gl';
 import {
-  BASE_FS, COMPOSITE_FS, DAB_FS, DAB_VS, FULLSCREEN_VS, PAPER_FS, POUR_DOWN_FS, POUR_SEED_FS, POUR_SEED_VS, POUR_SPREAD_FS,
+  BASE_FS, COMPOSITE_FS, DAB_FS, DAB_VS, FULLSCREEN_VS, HOLD_FS, PAPER_FS, POUR_DOWN_FS, POUR_SEED_FS, POUR_SEED_VS, POUR_SPREAD_FS,
   STROKE_FS, STROKE_VS,
 } from './shaders';
 
@@ -25,6 +25,8 @@ export interface LivingParams {
   strokeScale: number;
   angle: number;
   layers: StrokeLayer[];
+  /** 1 makes the held picture follow the living view everywhere, wet or not. */
+  follow: number;
 }
 
 export interface CompositeParams {
@@ -37,6 +39,8 @@ export interface CompositeParams {
   layers: number;
   pulse?: [number, number, number, number];
   pulseAmt?: number;
+  /** How strongly the moving figures show in pencil where the paint isn't alive. */
+  figures?: number;
 }
 
 export interface Dab {
@@ -66,6 +70,10 @@ export class Painter {
   readonly h: number;
   private paper: Target;
   private living: Target;
+  private held: [Target, Target];
+  private heldIdx = 0;
+  private pHold: Program;
+  private figuresTex: WebGLTexture;
   private mask: Target;
   private lift: Target;
   private dry: [Target, Target];
@@ -120,6 +128,7 @@ export class Painter {
     this.pSeed = new Program(gl, POUR_SEED_VS, POUR_SEED_FS);
     this.pSpread = new Program(gl, FULLSCREEN_VS, POUR_SPREAD_FS);
     this.pDown = new Program(gl, FULLSCREEN_VS, POUR_DOWN_FS);
+    this.pHold = new Program(gl, FULLSCREEN_VS, HOLD_FS);
     const pPaper = new Program(gl, FULLSCREEN_VS, PAPER_FS);
 
     this.emptyVao = gl.createVertexArray()!;
@@ -140,6 +149,7 @@ export class Painter {
     const half = !!gl.getExtension('EXT_color_buffer_float');
     this.paper = createTarget(gl, w, h);
     this.living = createTarget(gl, w, h);
+    this.held = [createTarget(gl, w, h), createTarget(gl, w, h)];
     this.mask = createTarget(gl, w, h, true, half);
     this.lift = createTarget(gl, w, h, true, half);
     this.dry = [createTarget(gl, w, h), createTarget(gl, w, h)];
@@ -156,6 +166,7 @@ export class Painter {
     this.sceneTex = this.makeInputTexture();
     this.flowTex = this.makeInputTexture();
     this.sketchTex = this.makeInputTexture();
+    this.figuresTex = this.makeInputTexture();
 
     this.snaps = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.snaps);
@@ -213,6 +224,10 @@ export class Painter {
     this.upload(this.sketchTex, src);
   }
 
+  uploadFigures(src: TexImageSource): void {
+    this.upload(this.figuresTex, src);
+  }
+
   uploadRegions(src: TexImageSource): void {
     this.upload(this.regionTex, src);
     const gl = this.gl;
@@ -224,6 +239,8 @@ export class Painter {
     const [r, g, b] = PAPER_RGB;
     clearTarget(this.gl, this.dry[0], r, g, b);
     clearTarget(this.gl, this.dry[1], r, g, b);
+    clearTarget(this.gl, this.held[0], r, g, b);
+    clearTarget(this.gl, this.held[1], r, g, b);
     this.dryIdx = 0;
     this.clearMask();
     this.clearLift();
@@ -289,6 +306,24 @@ export class Painter {
       gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
     });
     gl.disable(gl.BLEND);
+    this.hold(p.follow);
+  }
+
+  private hold(follow: number): void {
+    const gl = this.gl;
+    const src = this.held[this.heldIdx];
+    const dst = this.held[1 - this.heldIdx];
+    bindTarget(gl, dst);
+    gl.bindVertexArray(this.emptyVao);
+    gl.disable(gl.BLEND);
+    this.pHold.use()
+      .tex('uHeld', 0, src.tex)
+      .tex('uLiving', 1, this.living.tex)
+      .tex('uPour', 2, this.pour[this.pourIdx].tex)
+      .f('uFollow', follow)
+      .f('uAspect', ASPECT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.heldIdx = 1 - this.heldIdx;
   }
 
   private drawDabs(target: Target, dabs: Dab[], wet: number): void {
@@ -339,11 +374,26 @@ export class Painter {
 
   dryMask(dt: number, rate = 0.55): void {
     this.decay(this.mask, 1, Math.exp(-dt * rate));
-    this.decay(this.pour[this.pourIdx], 1, Math.exp(-dt * rate));
+    this.decay(this.pour[this.pourIdx], Math.exp(-dt * 0.35), Math.exp(-dt * rate));
+  }
+
+  /** Sets the paint inside a box (scene units, y down) at once, keeping whatever it shows now. */
+  setPaint(x: number, y: number, rx: number, ry: number): void {
+    const gl = this.gl;
+    const t = this.pour[this.pourIdx];
+    const u0 = Math.max(0, (x - rx) / ASPECT);
+    const u1 = Math.min(1, (x + rx) / ASPECT);
+    const v0 = Math.max(0, y - ry);
+    const v1 = Math.min(1, y + ry);
+    bindTarget(gl, t);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(Math.floor(u0 * t.w), Math.floor(v0 * t.h), Math.ceil((u1 - u0) * t.w), Math.ceil((v1 - v0) * t.h));
+    this.decay(t, 1, 0);
+    gl.disable(gl.SCISSOR_TEST);
   }
 
   /** Drops paint at each dab; its strength is how far the paint will flow. */
-  pourSeed(dabs: Dab[]): void {
+  pourSeed(dabs: Dab[], anyRegion = false): void {
     if (dabs.length === 0) return;
     const gl = this.gl;
     const n = Math.min(dabs.length, this.dabData.length / 6);
@@ -357,7 +407,7 @@ export class Painter {
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.dabData, 0, n * 6);
     gl.enable(gl.BLEND);
     gl.blendEquation(gl.MAX);
-    this.pSeed.use().f('uRes', this.pour[0].w, this.pour[0].h).tex('uRegion', 0, this.regionTex);
+    this.pSeed.use().f('uRes', this.pour[0].w, this.pour[0].h).tex('uRegion', 0, this.regionTex).f('uAnyRegion', anyRegion ? 1 : 0);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, n);
     gl.blendEquation(gl.FUNC_ADD);
     gl.disable(gl.BLEND);
@@ -410,7 +460,7 @@ export class Painter {
     gl.disable(gl.BLEND);
     this.pComposite.use()
       .tex('uDry', 0, this.dry[this.dryIdx].tex)
-      .tex('uLiving', 1, this.living.tex)
+      .tex('uLiving', 1, this.held[this.heldIdx].tex)
       .tex('uMask', 2, this.mask.tex)
       .tex('uSketch', 3, this.sketchTex)
       .tex('uPaper', 4, this.paper.tex)
@@ -431,7 +481,9 @@ export class Painter {
       .f('uPaperCol', ...PAPER_RGB)
       .f('uDryFade', c.dryFade)
       .f('uPulse', ...(c.pulse ?? [0, 0, 1, 1]))
-      .f('uPulseAmt', c.pulseAmt ?? 0);
+      .f('uPulseAmt', c.pulseAmt ?? 0)
+      .tex('uFigures', 8, this.figuresTex)
+      .f('uFigAmt', c.figures ?? 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

@@ -21,6 +21,8 @@ export interface AudioEngine {
   setMuted(muted: boolean): void;
   readonly muted: boolean;
   liftLayer(id: ScoreId | null): void;
+  /** The church bell strikes eight, in time with the current score. */
+  bell(): void;
 }
 
 const LOOKAHEAD = 0.13;
@@ -171,6 +173,16 @@ export function createAudioEngine(): AudioEngine {
     liftLayer(id) {
       layer = id;
       if (current) current.mode = liftMode();
+    },
+
+    bell() {
+      if (!ctx || !current || ctx.state !== 'running') return;
+      const p = current;
+      const beat = p.comp.beat;
+      const from = Math.ceil((ctx.currentTime - p.t0 + 0.05) / beat) * beat;
+      for (let k = 0; k < 8; k++) {
+        p.dispatch({ kind: 'note', t: from + k * 3 * beat, inst: 'bell', midi: 62, dur: 12, vel: 0.8 * (k === 0 ? 1 : 0.94), pan: -0.35, bus: 'far' });
+      }
     },
   };
   engineStats.set(engine, () => ({
