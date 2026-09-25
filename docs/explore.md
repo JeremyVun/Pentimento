@@ -60,7 +60,7 @@ Core loop to test, "wet paint lives, dry paint keeps the moment":
 What changed:
 - Pouring works the same in every sitting. No spilling across shapes at nine, no running paint at forty-four: her age shows only in how the paint looks (chunkier strokes at nine, slower drying at forty-four). A click now covers most of a shape; holding finishes it. Paint no longer loses reach while it spreads (that shortened every pour); a separate fading "fresh paint" channel re-wets dry paint when you pour over it.
 - Moments come when she's ready (enough painted, or the brush has been down a few seconds) rather than on the clock, and move shorter distances. The sitting ends by itself once everything has passed and she has stopped painting for a few seconds.
-- The board fills the window, and Begin goes full screen. Hints, notes and buttons sit on the board.
+- The board fills the window. A button beside Mute (or F) goes full screen; Begin doesn't, at Jeremy's request. Hints, notes and buttons sit on the board.
 - The town grows across the life: houses spread across the fields after the bridge opens, a mill smokes at forty-four and is cold by seventy-two, telegraph poles, houses up the hill, flats by the church, and wind turbines at the end.
 
 ## Jeremy on her age in the painting (2026-09-25, verbatim)

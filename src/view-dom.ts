@@ -43,6 +43,8 @@ function brushSwatch(): string {
 const SPEAKER = '<path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/>';
 const WAVES = '<path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>';
 const CROSS = '<path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>';
+const EXPAND = '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+const SHRINK = '<path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
 
 /** Everything on the page apart from the painting itself. */
 export class View {
@@ -56,6 +58,7 @@ export class View {
   private liftLabel: HTMLElement;
   private finish: HTMLButtonElement;
   private mute: HTMLButtonElement;
+  private fullscreen: HTMLButtonElement;
   private end: HTMLElement;
   private controls!: HTMLElement;
   private rect = { x: 0, y: 0, w: 0, h: 0 };
@@ -77,10 +80,7 @@ export class View {
     const plate = el('div', 'plate', this.title);
     el('h1', '', plate, TITLE);
     const begin = el('button', 'begin', plate, UI.begin);
-    begin.addEventListener('click', () => {
-      if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {});
-      this.onBegin?.();
-    });
+    begin.addEventListener('click', () => this.onBegin?.());
     this.notes = el('div', 'notes', root);
     el('p', 'rotate', this.notes, UI.rotate);
 
@@ -98,6 +98,11 @@ export class View {
     this.mute = el('button', 'quiet icon', controls);
     this.showMuted();
     this.mute.addEventListener('click', () => this.toggleMute());
+    this.fullscreen = el('button', 'quiet icon', controls);
+    this.fullscreen.hidden = !document.fullscreenEnabled;
+    this.showFullscreen();
+    this.fullscreen.addEventListener('click', () => this.toggleFullscreen());
+    document.addEventListener('fullscreenchange', () => this.showFullscreen());
 
     this.end = el('div', 'end', root);
     const save = el('button', 'quiet', this.end, UI.save);
@@ -107,10 +112,7 @@ export class View {
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'm' || e.key === 'M') this.toggleMute();
-      if (e.key === 'f' || e.key === 'F') {
-        if (document.fullscreenElement) void document.exitFullscreen();
-        else void document.documentElement.requestFullscreen?.().catch(() => {});
-      }
+      if (e.key === 'f' || e.key === 'F') this.toggleFullscreen();
     });
     window.addEventListener('resize', () => this.layout());
     this.layout();
@@ -128,6 +130,19 @@ export class View {
     this.mute.setAttribute('aria-label', label);
     this.mute.title = `${label} (M)`;
     this.mute.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${SPEAKER}${this.muted ? CROSS : WAVES}</svg>`;
+  }
+
+  private toggleFullscreen(): void {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+
+  private showFullscreen(): void {
+    const on = !!document.fullscreenElement;
+    const label = on ? UI.exitFullscreen : UI.fullscreen;
+    this.fullscreen.setAttribute('aria-label', label);
+    this.fullscreen.title = `${label} (F)`;
+    this.fullscreen.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${on ? SHRINK : EXPAND}</svg>`;
   }
 
   /** CSS size of the board, used to choose the painting resolution. */

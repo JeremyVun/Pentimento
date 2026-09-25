@@ -221,6 +221,7 @@ button {
 .quiet:hover::before, .quiet:focus-visible::before { background: rgba(251, 244, 228, 0.95); }
 .quiet:focus-visible { outline: none; text-decoration: underline; text-underline-offset: 0.2em; }
 .quiet.icon { display: flex; align-items: center; padding: 0.3em 0.85em 0.36em; font-size: clamp(12px, calc(var(--board-h) * 0.02), 15px); }
+.quiet[hidden] { display: none; }
 .quiet.icon svg { width: 1.55em; height: 1.55em; display: block; }
 .quiet.icon:focus-visible::after {
   content: '';
