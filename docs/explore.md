@@ -56,6 +56,10 @@ Core loop to test, "wet paint lives, dry paint keeps the moment":
 - Once the painting dries and is still, she talks about what's in it: `before` lines, then each thing that was painted or caught in the order it happened, then `after` lines, then the closing line. Each note sits on the painting beside the thing it's about, which stays lit while the rest dims (`focus` in the composite). Click to move on.
 - Narration now lives on the board (`src/narration.ts`), not in a strip under it.
 
+Jeremy, after playing it (verbatim):
+
+> i think it works way better now this way with the words being before and after as reflections.
+
 ## Prototype 1: moments (built 2026-09-25)
 
 Play it with the worktree's dev server (`npx vite --port 5327` in `/private/tmp/pentimento-explore`). `?from=<chapter id>` starts at that chapter with every earlier year painted in full; `?speed=` still works. `tools/moment.mjs` plays one chapter and tries to catch each moment.
