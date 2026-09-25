@@ -7,7 +7,7 @@
 - **Light is palette, not rendering.** Each chapter has a hand-picked palette in `src/scene/config.ts`. There are no lighting passes; the time of day lives in the colours.
 - **Paper and tape.** Warm cold-press paper (`PAPER_RGB`), masking tape round the edge, and paint that can run over the tape in the current sitting.
 - **Wet then dry.** Fresh paint is darker, more saturated, with a faint sheen, and dries matte within a couple of seconds. Keep the sheen subtle; a sparkle means it's too strong.
-- **Poured paint.** A pour takes about a second and a half to spread, with a ragged wet front, and stops at the edge of its shape, leaving a pixel or two of bleed. Regions come from the drawn scene itself, so a pour never leaves rectangular ghosts. Hairline details (twigs, fronds, ropes) belong to whatever is behind them.
+- **Poured paint.** A pour's reach grows over about a second and a half, so it spreads with a round, ragged wet front (never a geometric one), and stops at the edge of its shape, leaving a pixel or two of bleed. Regions come from the drawn scene itself, so a pour never leaves rectangular ghosts. Hairline details (twigs, fronds, ropes) belong to whatever is behind them.
 - **Pencil first.** Each new year appears as a thin graphite underdrawing over the old paint, light where the paint is dark.
 - **The present moves, the past is still.** Only the current sitting's paint animates (flowing strokes, water, weather, people). Dried years never move.
 

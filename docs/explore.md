@@ -89,6 +89,10 @@ At two to three seconds the spreading paint showed as a many-sided shape, which 
 
 Settled at 100 passes a second: a pour takes about 1.3 seconds, against under one before and 2.5 at the slowest.
 
+> ok, if i move my omuse around i dont see the hexagons, but if i keep my omuse in the same place i do. any solutions?
+
+A moving mouse drops paint in many places, and the overlapping patches hide the shape. A still one shows the shape of the spread itself. So paint spreads at the old speed again, and each drop's reach grows over about a second and a half instead (`REACH_PER_SEC` in `src/game.ts`). The visible edge is then the reach limit, which is round and ragged like the edges of the original fills. Speed, reach and the finished fill are unchanged.
+
 ## Polish after the merge (2026-09-25)
 
 - Catching now takes a pour on the moment while it's there. Wet paint it happens to walk through no longer catches it, so catching is always a choice.

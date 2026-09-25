@@ -6,8 +6,8 @@ import {
 
 export const ASPECT = 1.6;
 export const MAX_LAYERS = 10;
-/** Spread passes a second: a pour takes about a second and a half to flow across its shape. */
-const SPREAD_PASSES = 100;
+/** Spread passes a second, so paint flows at the same speed whatever the display's frame rate. */
+const SPREAD_PASSES = 170;
 export const PAPER_RGB: [number, number, number] = [0.953, 0.925, 0.868];
 
 export interface StrokeLayer {
@@ -444,7 +444,7 @@ export class Painter {
 
   dryMask(dt: number, rate = 0.55): void {
     this.decay(this.mask, 1, Math.exp(-dt * rate));
-    this.decay(this.pour[this.pourIdx], 1, Math.exp(-dt * rate), Math.exp(-dt * 0.8 * SPREAD_PASSES / 170));
+    this.decay(this.pour[this.pourIdx], 1, Math.exp(-dt * rate), Math.exp(-dt * 0.8));
   }
 
   /** Holds the paint inside an ellipse (scene units, y down) at what the view shows now, however wet it still is. */
