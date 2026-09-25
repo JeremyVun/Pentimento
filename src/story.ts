@@ -86,9 +86,6 @@ export const CHAPTERS: Chapter[] = [
     before: [
       "They were building the bridge that year. It took three years, and the whole town complained about the noise.",
     ],
-    after: [
-      "I kept painting the view, even though I said I was sick of it.",
-    ],
     moments: [
       {
         id: 'train',
