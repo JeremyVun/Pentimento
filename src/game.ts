@@ -48,6 +48,7 @@ export class Game {
   private cfg: SceneConfig = SCENES.title;
   private sceneT = 0;
   private wakeTimes: Record<string, number> = {};
+  private keptTimes: Record<string, number> = {};
   private sceneCanvas: HTMLCanvasElement;
   private sceneCtx: CanvasRenderingContext2D;
   private flowCanvas: HTMLCanvasElement;
@@ -265,6 +266,7 @@ export class Game {
     this.cfg = { ...cfg, moments: cfg.moments && { ...cfg.moments } };
     this.sceneT = 0;
     this.wakeTimes = {};
+    this.keptTimes = {};
     drawFlow(this.flowCanvas.getContext('2d')!, this.flowCanvas.height, cfg);
     this.painter.uploadFlow(this.flowCanvas);
     const sctx = this.sketchCanvas.getContext('2d')!;
@@ -568,6 +570,7 @@ export class Game {
       } else if (m.state === 'caught') {
         if (!m.set && woke !== undefined && woke >= (SETS_AFTER[def.id] ?? 2.5) && spot) {
           m.set = true;
+          this.keptTimes[def.id] = this.sceneT;
           this.painter.setPaint(spot.x, spot.y, spot.rx + 0.015, spot.ry + 0.015);
         }
         if (!spot) {
@@ -734,11 +737,13 @@ export class Game {
     if (needsLiving) {
       const woke: Record<string, number> = {};
       for (const [k, v] of Object.entries(this.wakeTimes)) woke[k] = this.sceneT - v;
-      drawScene(this.sceneCtx, this.sceneCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke });
+      const kept: Record<string, number> = {};
+      for (const [k, v] of Object.entries(this.keptTimes)) kept[k] = this.sceneT - v;
+      drawScene(this.sceneCtx, this.sceneCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke, kept });
       this.painter.uploadScene(this.sceneCanvas, needsMip(this.cfg));
       const slow = this.reducedMotion ? 0.4 : 1;
       if (this.phase !== 'title' && this.phase !== 'opening') {
-        drawFigures(this.figuresCanvas.getContext('2d')!, this.figuresCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke });
+        drawFigures(this.figuresCanvas.getContext('2d')!, this.figuresCanvas.height, { cfg: this.cfg, t: this.sceneT, sketch: false, woke, kept });
         this.painter.uploadFigures(this.figuresCanvas);
         const hasGhosts = this.cfg.figures.some((g) => g === 'joeGhost' || g === 'fatherGhost');
         if (hasGhosts || this.ghostsShown) {

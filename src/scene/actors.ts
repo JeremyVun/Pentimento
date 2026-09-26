@@ -194,15 +194,23 @@ export function joeOnBridge(c: Frame['cfg'], t: number, woke: number | undefined
   return { x: lerp(0.37, 1.12, walkT / walk), y: BRIDGE.top, walkT, waving: woke !== undefined && woke < JOE_STOPS };
 }
 
+const KEPT_FADE = 1.2;
+
+/** How much of a caught moment that moves on still shows in the living view: once the paint has kept it, it fades so it isn't there twice. */
+function keptAlpha(f: Frame, id: string): number {
+  const k = f.kept?.[id];
+  return k === undefined ? 1 : 1 - clamp(k / KEPT_FADE);
+}
+
 const FERRY_CROSSING = 18;
 const FERRY_WAVES = 6;
 
-/** The ferry's x on the river. With a moment set, it waits at the far jetty, crosses once and ties up at the near one. */
+/** The ferry's x on the river. With a moment set, it waits at the far jetty and crosses once; caught, it stays where the paint kept it, since it never leaves the view. */
 export function ferryX(c: Frame['cfg'], t: number, woke: number | undefined): { x: number; crossing: boolean } {
   const at = c.moments?.ferry;
   if (at === undefined) return { x: lerp(0.54, 1.04, 0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 36)), crossing: true };
-  const u = (t - at - (woke === undefined ? 0 : Math.min(woke, FERRY_WAVES))) / FERRY_CROSSING;
-  return { x: lerp(1.04, 0.54, smooth(0, 1, clamp(u))), crossing: u > 0 && u < 1 };
+  const u = (t - at - (woke ?? 0)) / FERRY_CROSSING;
+  return { x: lerp(1.04, 0.54, smooth(0, 1, clamp(u))), crossing: woke === undefined && u > 0 && u < 1 };
 }
 
 const TRAIN_CROSSING = 16;
@@ -220,7 +228,10 @@ function trainX(c: Frame['cfg'], t: number): number | null {
 export function drawTrain(ctx: CanvasRenderingContext2D, f: Frame): void {
   if (!f.cfg.figures.includes('train')) return;
   const x = trainX(f.cfg, f.t);
-  if (x === null) return;
+  const alpha = keptAlpha(f, 'train');
+  if (x === null || alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
   const y = TRAIN_Y;
   const cars = ['#c0392b', '#3f5d86', '#3f5d86', '#3f5d86'];
   ctx.strokeStyle = '#4a4038';
@@ -247,6 +258,7 @@ export function drawTrain(ctx: CanvasRenderingContext2D, f: Frame): void {
     const ph = (f.t * 0.7 + k / 6) % 1;
     circle(ctx, sx + ph * 0.09 * (back ? -1 : 1), y - 0.034 - ph * 0.035, 0.005 + ph * 0.014, withAlpha('#f4efe6', 0.7 * (1 - ph)));
   }
+  ctx.restore();
 }
 
 const BUS_CROSSING = 16;
@@ -436,11 +448,14 @@ export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void
   if (joe) {
     const w = f.woke.joe;
     const umbrellaUp = c.weather === 'rain' && f.t < c.duration * 0.4;
+    ctx.save();
+    ctx.globalAlpha = keptAlpha(f, 'joe');
     person(ctx, joe.x, y, 0.054, JOE, {
       walk: joe.waving ? undefined : joe.walkT * 6,
       wave: joe.waving ? (w ?? 0) * 8 : 0,
       umbrella: umbrellaUp ? '#2c2b31' : undefined,
     });
+    ctx.restore();
   }
   if (c.figures.includes('workers')) {
     const beat = f.t * (100 / 60) * Math.PI;
@@ -474,6 +489,8 @@ export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void
   }
   const bx = c.figures.includes('bus') ? busX(c, f.t) : null;
   if (bx !== null) {
+    ctx.save();
+    ctx.globalAlpha = keptAlpha(f, 'bus');
     const x = bx;
     const by = BRIDGE.top - 0.004;
     const w = 0.085;
@@ -502,6 +519,7 @@ export function drawBridgeFigures(ctx: CanvasRenderingContext2D, f: Frame): void
         circle(ctx, x - w / 2 - 0.01 - ph * 0.06, by - 0.01 - ph * 0.03, 0.004 + ph * 0.012, withAlpha('#e8e2da', 0.35 * (1 - ph)));
       }
     }
+    ctx.restore();
   }
   if (c.figures.includes('kidsBridge') && (c.moments?.kids === undefined || f.t >= c.moments.kids)) {
     const wk = kidsJumpT(c, f.t, f.woke.kids);
@@ -663,8 +681,11 @@ export function drawGardenFigures(ctx: CanvasRenderingContext2D, f: Frame): void
     const wk = f.woke.child;
     const waving = wk !== undefined && wk < 7;
     const bob = f.sketch ? 0 : Math.abs(Math.sin(f.t * 2.5)) * 0.004;
+    ctx.save();
+    ctx.globalAlpha = keptAlpha(f, 'child');
     person(ctx, kid.x, kid.y - bob, 0.075, { coat: '#f2c94c', legs: '#4a7ab8', hair: '#6a4a36', skin: '#eab99a', child: true },
       waving ? { wave: wk * 8, bothArms: true } : { armUp: 0.8 });
+    ctx.restore();
   }
   if (c.figures.includes('june')) {
     person(ctx, 0.46, 0.94, 0.15, { coat: '#d6402f', legs: '#3b3f52', hair: '#4a3428', skin: '#e3b596', long: true }, {});
@@ -758,6 +779,8 @@ export function drawBirds(ctx: CanvasRenderingContext2D, f: Frame): void {
   } else if (c.birds === 'robin') {
     const r = robinAt(c, f.t, f.woke.robin);
     if (!r) return;
+    ctx.save();
+    ctx.globalAlpha = keptAlpha(f, 'robin');
     const { x, y } = r;
     const bob = Math.sin(f.t * 5) > 0.95 ? 0.002 : 0;
     ellipse(ctx, x, y - bob, 0.011, 0.009, -0.2, '#7a5a42');
@@ -770,6 +793,7 @@ export function drawBirds(ctx: CanvasRenderingContext2D, f: Frame): void {
     ctx.moveTo(x - 0.009, y - bob);
     ctx.lineTo(x - 0.018, y - 0.005 - bob);
     ctx.stroke();
+    ctx.restore();
   }
 }
 

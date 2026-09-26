@@ -11,6 +11,8 @@ export interface Frame {
   sketch: boolean;
   /** Seconds since each subject woke, or undefined if it hasn't. */
   woke: Record<string, number | undefined>;
+  /** Seconds since the paint set around each caught moment. */
+  kept?: Record<string, number>;
   /** Set only when drawing the region map: called with the region each element belongs to. */
   region?: (id: number) => void;
 }
